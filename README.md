@@ -334,3 +334,8 @@ for personal, low-volume use, and you are responsible for how you use it.
 ## License
 
 [MIT](LICENSE)
+
+## Yandex Market
+
+Read-only active/completed buyer orders are available through
+`yandex_market_list_orders`. See [configuration and limitations](docs/yandex-market.md).

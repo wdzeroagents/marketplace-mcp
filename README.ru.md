@@ -333,3 +333,7 @@ make check-all   # ruff format --check, ruff check, ty, pytest с гейтом �
 ## Лицензия
 
 [MIT](LICENSE)
+# Яндекс Маркет
+
+Добавлен инструмент чтения активных и завершённых заказов
+`yandex_market_list_orders`. [Настройка и ограничения](docs/yandex-market.md).

@@ -15,7 +15,14 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from marketplace_mcp.settings import get_settings
 
-INSTRUCTIONS: Final = """Read-write access to one ozon.ru buyer account: orders, purchases, returns, cart,
+INSTRUCTIONS: Final = """Yandex Market: yandex_market_list_orders(scope="active"|"completed", limit=100) reads
+order groups and their Russian status via the internal JSON API. It has separate operator-provided
+YANDEX_MARKET_SESSION_ID and YANDEX_MARKET_SK credentials and does not require an Ozon login.
+Never request these secrets through MCP tool arguments. On [session_expired], the operator must
+refresh both credentials and restart the server. Completed does not imply received. Details,
+automatic login renewal, and Yandex Market store synchronization are not supported.
+
+Read-write access to one ozon.ru buyer account: orders, purchases, returns, cart,
 favorites, collections, product cards, catalog search, checkout, Ozon Card balance and points.
 Everything acts on the signed-in account of a real person, and money is real.
 
