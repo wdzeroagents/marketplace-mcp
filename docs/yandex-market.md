@@ -47,3 +47,7 @@ No existing Ozon or Wildberries behavior is changed.
 The endpoint, first-page reads, active orders, and the `Session_id` + `sk` credential
 combination were verified in a separate live investigation. Adapter unit tests use
 synthetic fixtures; no real account data or credentials belong in the repository.
+
+The Python adapter itself was also smoke-tested against a signed-in account: one
+active group and twenty completed groups were parsed successfully, with a continuation
+token for history. This does not establish long-term session renewal or API stability.
