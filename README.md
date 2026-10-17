@@ -1,14 +1,21 @@
 ***English** · [Русский](README.ru.md)*
 
-# Ozon MCP
+# Marketplace MCP
 
-An [MCP](https://modelcontextprotocol.io/) server for one **ozon.ru buyer
-account**. It reads orders, purchases, returns, the cart, favorites, wishlists,
-«Подборки», product cards, catalog search, the Ozon Card balance and points —
-and, when explicitly allowed, changes the cart and the lists and runs an order:
-forming a checkout, placing it, paying, cancelling it item by item.
+An [MCP](https://modelcontextprotocol.io/) server with adapters for three
+marketplaces. Their capabilities are separate:
 
-None of this has a public API. The server talks to the same internal
+| Marketplace | Adapter capability |
+|---|---|
+| Ozon | MCP tools for the signed-in buyer account: orders, purchases, returns, cart, favorites, lists, catalog, checkout and finances. Some tools can change the account when explicitly enabled. |
+| Wildberries | A source adapter that reads purchases, orders and parcels into the shared core record model. It is not currently exposed as a separate set of MCP tools. |
+| Yandex Market | Read-only MCP tool for active and completed buyer order groups; no detail or mutation tools. |
+
+The detailed setup and tool reference below describe the Ozon adapter. Each
+marketplace has its own session and request behavior; see the [Yandex Market
+notes](docs/yandex-market.md) and [Wildberries adapter notes](docs/wildberries.md).
+
+The Ozon adapter has no public API for these account features. It talks to the same internal
 `composer-api` / `entrypoint-api` endpoints the site's own frontend uses, under
 your authenticated session.
 
@@ -328,8 +335,10 @@ nothing in the suite touches the network.
 
 ## Disclaimer
 
-Scraping a personal account is against Ozon's Terms of Service. This project is
-for personal, low-volume use, and you are responsible for how you use it.
+The Ozon adapter reads a personal account through internal endpoints and may
+conflict with Ozon's Terms of Service. This project is intended for personal,
+low-volume use; check the applicable marketplace terms before using another
+adapter.
 
 ## License
 

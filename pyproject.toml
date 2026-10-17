@@ -1,7 +1,7 @@
 [project]
 name = "marketplace-mcp"
 version = "1.5.0"
-description = "Model Context Protocol server for the ozon.ru buyer account: orders, cart, favorites, product cards, purchase history and catalog search over the internal composer-api."
+description = "Model Context Protocol server with Ozon buyer-account tools, a Wildberries order-data source adapter, and read-only Yandex Market buyer-order access."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Alexander Zhukov" }]
