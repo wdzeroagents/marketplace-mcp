@@ -21,6 +21,9 @@ ENUM_ARGUMENTS = (
     ("purchases", "sort"),
     ("search", "sort"),
     ("select_cart_items", "mode"),
+    ("marketplace_orders", "marketplace"),
+    ("marketplace_orders", "scope"),
+    ("marketplace_order_details", "marketplace"),
 )
 GATED_TOOLS = (
     "set_cart_quantity",

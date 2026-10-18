@@ -51,7 +51,8 @@ def _money(kopecks: Any) -> str | None:
 
 def _title(line: dict[str, Any]) -> str | None:
     """Brand and name together, the way the site shows them."""
-    brand, name = (line.get("brand") or "").strip(), (line.get("name") or "").strip()
+    brand = str(line.get("brand") or "").strip()
+    name = str(line.get("name") or "").strip()
     return " ".join(part for part in (brand, name) if part) or None
 
 

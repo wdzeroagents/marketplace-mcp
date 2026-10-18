@@ -15,11 +15,22 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from marketplace_mcp.settings import get_settings
 
-INSTRUCTIONS: Final = """This server includes adapters for Ozon, Wildberries, and Yandex Market, with different
-capabilities. The Ozon and Yandex Market adapters register MCP tools. Wildberries currently has a
-source adapter for purchases, orders, and parcels in the shared core model, but no separate MCP tools.
+INSTRUCTIONS: Final = """This server includes buyer adapters for Ozon, Wildberries, and Yandex Market, with different
+capabilities. Ozon tools use the signed-in Ozon account. Wildberries and Yandex Market keep separate
+persistent browser profiles and do not require an Ozon login.
 
-Yandex Market tools use a separate persistent browser profile and do not require an Ozon login.
+For Wildberries, call wildberries_open_login() and sign in in the browser, then check
+wildberries_session_status(). Call wildberries_sync_orders() to save orders and parcel details, then
+read them with marketplace_orders(marketplace="wildberries") and
+marketplace_order_details(marketplace="wildberries", order_number=...).
+wildberries_sync_prices() records historical purchase prices, not current catalogue prices. The
+profile defaults to /data/wildberries-profile; token and cookies stay out of MCP arguments and logs.
+
+The shared marketplace_orders() and marketplace_order_details() tools read normalized data from the
+local store. Sync the selected marketplace first. Use marketplace="ozon", "wildberries", or
+"yandex_market"; the last one becomes available after Yandex order sync is implemented.
+
+Yandex Market tools use a separate persistent browser profile.
 Call yandex_market_open_login() to sign in or complete a challenge, then verify with
 yandex_market_session_status(). Search and product details read the public storefront; use
 yandex_market_search() then yandex_market_product_details(). yandex_market_add_to_cart() and

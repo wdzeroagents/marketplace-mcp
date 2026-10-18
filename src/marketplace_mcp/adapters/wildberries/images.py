@@ -117,7 +117,8 @@ class ImageFinder:
         tried either way, so the failure needs noting and nothing more.
         """
         try:
-            return self._http.head(url, timeout=self._timeout).status_code == _OK
+            status_code = self._http.head(url, timeout=self._timeout).status_code
+            return isinstance(status_code, int) and status_code == _OK
         except RequestException as unreachable:
             # Narrow on purpose. This caught Exception once, and swallowed a
             # misspelled constant as "no picture" for every product on the

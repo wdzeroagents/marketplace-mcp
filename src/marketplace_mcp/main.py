@@ -20,12 +20,27 @@ from marketplace_mcp.adapters.ozon.tools import (
     session,
     store,
 )
+from marketplace_mcp.adapters.wildberries import tools as wildberries
 from marketplace_mcp.adapters.yandex_market import tools as yandex_market
+from marketplace_mcp.core.store import tools as shared_store
 from marketplace_mcp.mcp_server import mcp as _server
 
 # Naming the modules keeps the registration visible instead of leaving it to a
 # side effect nobody can see.
-TOOL_MODULES: Final = (orders, catalog, cart, favorites, selections, checkout, session, finance, store, yandex_market)
+TOOL_MODULES: Final = (
+    orders,
+    catalog,
+    cart,
+    favorites,
+    selections,
+    checkout,
+    session,
+    finance,
+    store,
+    yandex_market,
+    wildberries,
+    shared_store,
+)
 
 
 def build_server() -> FastMCP:

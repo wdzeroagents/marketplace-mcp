@@ -1,20 +1,51 @@
-# Wildberries source adapter
+# Wildberries buyer adapter
 
-The Wildberries adapter is implemented as `WildberriesSource` and maps the
-account archive into the shared core records for purchases, orders, and
-parcels. It reads the account through the JSON APIs used by the Wildberries
-site. A signed-in Chromium profile supplies the bearer token and cookies; the
-token is refreshed from that profile when it is missing or close to expiry.
+The Wildberries adapter reads the buyer's purchase archive through the JSON API
+used by the site and writes normalized orders, parcels, and items to the shared
+store.
 
-## Current integration status
+## Sign in
 
-This is a source-level adapter, not a set of user-facing MCP tools. The current
-server does not construct or register `WildberriesSource`, and there is no
-Wildberries profile setting or sync command wired into the application. The
-adapter's behavior is covered by unit tests using a stand-in session. Do not
-expect Wildberries data to appear through the running MCP server yet.
+Call `wildberries_open_login()` and sign in in the browser window it opens. Then
+call `wildberries_session_status()`. The adapter reads the token and anti-bot
+cookies from its own persistent profile; credentials never enter MCP arguments,
+results, or logs. A missing or rejected session is reported with the common
+`session_expired` code; sign in again in the same profile.
 
-The shared core can synchronize a `MarketplaceSource`, but the registered store
-tools currently construct `OzonSource` directly. A future integration needs to
-add Wildberries profile configuration and an explicit way to select or run that
-source before it is available through MCP.
+The profile defaults to `/data/wildberries-profile` and can be changed with
+`WILDBERRIES_PROFILE_DIR`. Set `WILDBERRIES_BROWSER_CHANNEL` to `msedge` or
+`chrome` to use an installed browser. To sign out completely, stop the server
+and remove that profile directory.
+
+## Tools
+
+- `wildberries_sync_orders(full=false, limit=1000)` stores order status, dates,
+  parcels, delivery destinations, payment method, and items. Settled orders are
+  skipped on routine runs; active and unfamiliar statuses are read again. Use
+  `full=true` for a first sync or a complete refresh.
+- `wildberries_sync_prices(limit=1000)` stores the amounts WB reports in purchase
+  history. These are historical amounts paid, not current catalogue prices.
+- `marketplace_orders(marketplace="wildberries", scope="all")` lists the
+  synchronized orders. `scope` can be `active` or `completed`.
+- `marketplace_order_details(marketplace="wildberries", order_number=...)`
+  returns a stored order with its parcels and item details.
+
+The store path is shared with Ozon and configured through `OZON_STORE_PATH`
+(default `/data/store.db`). Marketplace IDs are part of every key, so equal
+order numbers or product IDs from different marketplaces do not overwrite one
+another.
+
+## Data and limitations
+
+WB's archive has one row per purchased item and does not expose a parcel ID. The
+adapter groups items from one order by destination; this is the finest parcel
+grouping the endpoint supports. It maps known delivered, returned, cancelled,
+and failed-payment statuses into the common state. Unknown statuses stay active
+so later syncs can pick up a changed interpretation. A returned item has
+`received=false` because it is no longer owned.
+
+The archive gives the price paid at purchase time, while Ozon's price sync reads
+today's catalogue price. Do not compare those series as if they measured the
+same thing. WB does not expose a buyer-side product description endpoint through
+this adapter; details here are the order's recorded product, variant, seller,
+and delivery data.

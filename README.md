@@ -8,8 +8,8 @@ marketplaces. Their capabilities are separate:
 | Marketplace | Adapter capability |
 |---|---|
 | Ozon | MCP tools for the signed-in buyer account: orders, purchases, returns, cart, favorites, lists, catalog, checkout and finances. Some tools can change the account when explicitly enabled. |
-| Wildberries | A source adapter that reads purchases, orders and parcels into the shared core record model. It is not currently exposed as a separate set of MCP tools. |
-| Yandex Market | Read-only MCP tool for active and completed buyer order groups; no detail or mutation tools. |
+| Wildberries | Buyer sign-in, order and purchase sync, plus shared tools to read normalized orders and parcel details from the local store. |
+| Yandex Market | Buyer order groups, storefront search and product details, plus gated cart and favorite changes. |
 
 The detailed setup and tool reference below describe the Ozon adapter. Each
 marketplace has its own session and request behavior; see the [Yandex Market
@@ -352,3 +352,11 @@ the adapter keeps a separate persistent browser profile and does not require cop
 session values. Cart and favorite writes are off by default; set
 `YANDEX_MARKET_ENABLE_WRITES=1` to enable them. See
 [configuration and limitations](docs/yandex-market.md).
+
+## Wildberries
+
+Sign in through `wildberries_open_login()`, synchronize with
+`wildberries_sync_orders()`, then read the shared copy with
+`marketplace_orders(marketplace="wildberries")` and
+`marketplace_order_details(marketplace="wildberries", order_number=...)`.
+See [configuration and data limitations](docs/wildberries.md).

@@ -158,7 +158,7 @@ def link_duplicates(connection: Any, marketplace: str, at: str) -> dict[str, Any
         if key:
             groups[key].add(sku)
 
-    linked: list[tuple[str, str, str, str | None, str]] = []
+    linked: list[tuple[str, str, str, str, str, str]] = []
     verdicts: Counter[str] = Counter()
     for key, skus in groups.items():
         if len(skus) < 2:
