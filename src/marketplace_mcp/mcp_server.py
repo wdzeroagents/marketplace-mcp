@@ -20,11 +20,12 @@ capabilities. The Ozon and Yandex Market adapters register MCP tools. Wildberrie
 source adapter for purchases, orders, and parcels in the shared core model, but no separate MCP tools.
 
 Yandex Market: yandex_market_list_orders(scope="active"|"completed", limit=100) reads
-order groups and their Russian status via the internal JSON API. It has separate operator-provided
-YANDEX_MARKET_SESSION_ID and YANDEX_MARKET_SK credentials and does not require an Ozon login.
-Never request these secrets through MCP tool arguments. On [session_expired], the operator must
-refresh both credentials and restart the server. Completed does not imply received. Details,
-automatic login renewal, and Yandex Market store synchronization are not supported.
+order groups and their Russian status via the internal JSON API. To sign in or recover an expired
+session, call yandex_market_open_login(), finish sign-in or any challenge in its persistent browser,
+then verify with yandex_market_session_status(). The profile defaults to
+/data/yandex-market-profile; no cookies or request headers are copied into MCP. It does not require
+an Ozon login. Completed does not imply received. Details and Yandex Market store synchronization
+are not supported.
 
 Ozon tools provide read-write access to one ozon.ru buyer account: orders, purchases, returns, cart,
 favorites, collections, product cards, catalog search, checkout, Ozon Card balance and points.

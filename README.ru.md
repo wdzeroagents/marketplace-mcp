@@ -346,4 +346,6 @@ make check-all   # ruff format --check, ruff check, ty, pytest с гейтом �
 ## Яндекс Маркет
 
 Добавлен инструмент чтения активных и завершённых заказов
-`yandex_market_list_orders`. [Настройка и ограничения](docs/yandex-market.md).
+`yandex_market_list_orders`. Для входа вызовите `yandex_market_open_login()` и
+авторизуйтесь в отдельном постоянном профиле браузера — копировать параметры
+сессии вручную не нужно. [Настройка и ограничения](docs/yandex-market.md).

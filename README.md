@@ -347,4 +347,6 @@ adapter.
 ## Yandex Market
 
 Read-only active/completed buyer orders are available through
-`yandex_market_list_orders`. See [configuration and limitations](docs/yandex-market.md).
+`yandex_market_list_orders`. Sign in through `yandex_market_open_login()` once; the
+adapter keeps a separate persistent browser profile and does not require copied
+session values. See [configuration and limitations](docs/yandex-market.md).

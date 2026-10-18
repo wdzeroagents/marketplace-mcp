@@ -20,6 +20,20 @@ def _bad_response() -> YandexMarketError:
     return YandexMarketError(ErrorCode.UPSTREAM, "Yandex Market order response is incomplete or has changed.")
 
 
+def _page_groups(page: dict[str, Any], groups: dict[str, Any]) -> tuple[list[Any], str | None]:
+    token = page.get("pageToken")
+    if token is not None and not isinstance(token, str):
+        raise _bad_response()
+    group_ids = page.get("ordersGroupsIds")
+    if group_ids is None:
+        if "emptyState" in page and not groups and not token:
+            return [], None
+        raise _bad_response()
+    if not isinstance(group_ids, list):
+        raise _bad_response()
+    return group_ids, token or None
+
+
 def parse_page(
     answer: dict[str, Any], scope: Literal["active", "completed"]
 ) -> tuple[list[YandexMarketOrderGroup], str | None]:
@@ -38,21 +52,19 @@ def parse_page(
     if not isinstance(pages, dict) or not isinstance(ids[0], str):
         raise _bad_response()
     page = pages.get(ids[0])
-    if not isinstance(page, dict) or not isinstance(page.get("ordersGroupsIds"), list):
-        raise _bad_response()
-    token = page.get("pageToken")
-    if token is not None and not isinstance(token, str):
+    if not isinstance(page, dict):
         raise _bad_response()
     groups = collections.get("orderConsolidationGroup", {})
     if not isinstance(groups, dict):
         raise _bad_response()
+    group_ids, token = _page_groups(page, groups)
     rows = []
-    for group_id in page["ordersGroupsIds"]:
+    for group_id in group_ids:
         if not isinstance(group_id, str) or not isinstance(groups.get(group_id), dict):
             raise _bad_response()
         group = groups[group_id]
         rows.append(_parse_group(group_id, group, scope))
-    return rows, token or None
+    return rows, token
 
 
 def list_orders(scope: Literal["active", "completed"], limit: int) -> list[YandexMarketOrderGroup]:
