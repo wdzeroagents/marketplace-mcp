@@ -29,6 +29,8 @@ GATED_TOOLS = (
     "set_list_membership",
     "place_order",
     "cancel_order",
+    "yandex_market_add_to_cart",
+    "yandex_market_set_favorite",
 )
 
 

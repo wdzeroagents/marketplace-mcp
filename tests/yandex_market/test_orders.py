@@ -41,6 +41,13 @@ def test_empty_account_is_explicit() -> None:
     assert orders.parse_page(page([]), "active") == ([], None)
 
 
+def test_empty_state_resolver_page_is_an_empty_account() -> None:
+    data = page([])
+    collections = data["results"][0]["data"]["collections"]
+    collections["orderConsolidationResult"]["page"] = {"selectedTab": "ACTIVE", "emptyState": {}}
+    assert orders.parse_page(data, "active") == ([], None)
+
+
 @pytest.mark.parametrize(
     "answer", [{}, {"results": []}, {"results": [{"error": "secret"}]}, {"results": [{"data": {}}]}]
 )

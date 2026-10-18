@@ -30,7 +30,14 @@ def _orderlist(*statuses: str) -> dict[str, Any]:
     return {"widgetStates": {"orderList-1": json.dumps({"ordersV2": rows}, ensure_ascii=False)}}
 
 
-CURRENT_PAGE = _orderlist("Можно забирать", "В пути", "Получен 24 августа", "Отменён 1 сентября")
+CURRENT_PAGE = _orderlist(
+    "Можно забирать",
+    "В пути",
+    "Получен 24 августа",
+    "Отменён 1 сентября",
+    "Получено 30 июня",
+    "Отменено 15 октября",
+)
 
 
 def test_active_leaves_out_the_received_and_cancelled_rows(session: FakeSession) -> None:
@@ -42,7 +49,14 @@ def test_active_leaves_out_the_received_and_cancelled_rows(session: FakeSession)
 
 def test_the_finished_rows_are_still_readable_and_labelled() -> None:
     states = [order.state for order in parse_orders(CURRENT_PAGE)]
-    assert states == [OrderState.ACTIVE, OrderState.ACTIVE, OrderState.RECEIVED, OrderState.CANCELLED]
+    assert states == [
+        OrderState.ACTIVE,
+        OrderState.ACTIVE,
+        OrderState.RECEIVED,
+        OrderState.CANCELLED,
+        OrderState.RECEIVED,
+        OrderState.CANCELLED,
+    ]
 
 
 def test_all_does_not_serve_a_finished_order_twice(session: FakeSession) -> None:

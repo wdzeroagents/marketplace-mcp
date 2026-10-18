@@ -346,5 +346,9 @@ adapter.
 
 ## Yandex Market
 
-Read-only active/completed buyer orders are available through
-`yandex_market_list_orders`. See [configuration and limitations](docs/yandex-market.md).
+Yandex Market provides buyer order reads, storefront search and product details,
+plus gated cart and favorite changes. Sign in through `yandex_market_open_login()`;
+the adapter keeps a separate persistent browser profile and does not require copied
+session values. Cart and favorite writes are off by default; set
+`YANDEX_MARKET_ENABLE_WRITES=1` to enable them. See
+[configuration and limitations](docs/yandex-market.md).

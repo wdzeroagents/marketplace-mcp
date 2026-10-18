@@ -1,53 +1,65 @@
-# Yandex Market buyer orders
+# Yandex Market buyer tools
 
-The optional read-only adapter exposes `yandex_market_list_orders(scope="active", limit=100)`
-on the existing MCP server. Use `scope="completed"` for history. No Ozon login is required.
-The default is active orders; the limit (1–1000) counts delivery groups, not individual orders.
-A group may contain multiple order numbers. The adapter follows opaque page tokens and
-deduplicates group IDs within a call. It makes fresh requests on every invocation.
+The adapter uses its own persistent browser profile. Sign in with
+`yandex_market_open_login()` and verify the session with
+`yandex_market_session_status()`. Complete any Yandex access challenge manually in
+that browser. Cookies and short-lived request values stay in the browser; do not
+copy them into MCP arguments or environment variables. The profile defaults to
+`/data/yandex-market-profile`; set `YANDEX_MARKET_PROFILE_DIR` to choose another
+location. On Windows, `YANDEX_MARKET_BROWSER_CHANNEL` can select an installed
+browser such as `msedge` or `chrome`.
 
-## Configuration
+## Catalog
 
-Supply `YANDEX_MARKET_SESSION_ID` (the value of the `Session_id` cookie) and
-`YANDEX_MARKET_SK` (the `sk` request header) from the same signed-in buyer session,
-through the server process environment or your local secret manager. Do not paste
-credentials into MCP conversations, put them in command-line arguments or commit them.
-`YANDEX_MARKET_REQUEST_TIMEOUT` defaults to 30 seconds per page.
+`yandex_market_search(query, limit=16)` returns visible search tiles with product
+ID, title, displayed price, rating, image and a clean product-card URL. One page
+contains at most 16 results. `yandex_market_product_details(product_id_or_url)`
+accepts a numeric ID from search or a product-card URL and returns the title,
+structured price, availability, rating, review count, description and image.
 
-To locate the values locally, sign into market.yandex.ru in a dedicated browser profile,
-open DevTools Network, then the completed orders list and “Показать ещё”. Inspect the
-request whose resolver is `src/resolvers/orders/resolveConsolidationOrders`.
-The values must stay on the operator's machine. This module does not import browser profiles.
+Search is rendered by the storefront resolver
+`resolvePoorRemoteSearchApphost`; product data is read from the card's structured
+JSON-LD. The browser follows the same storefront flow as the website, so the
+adapter does not need to replay opaque search payloads or parse private page
+content.
 
-After replacing credentials, restart the MCP process: its settings are cached.
-No fixed credential lifetime is assumed and automatic renewal is not implemented.
-HTTP 401/403 reports `[session_expired]` (an access challenge can also produce 403);
-429 reports `[rate_limited]`. Other HTTP/transport/schema errors report
-`[upstream_unavailable]`. Errors never masquerade as an empty account, and upstream
-response bodies and transport exception text are not exposed in error messages.
+## Cart and favorites
 
-## Returned data and limits
+`yandex_market_add_to_cart(product_id_or_url)` adds the primary offer once. It
+checks the cart first to avoid adding a duplicate and confirms the item appears
+there afterward. `yandex_market_set_favorite(product_id_or_url, add=true)` adds a
+product to favorites; `add=false` removes it. The favorite operation checks the
+button state before and after the change.
 
-Each row contains `group_id`, `order_numbers`, `scope`, `status` (the site's Russian
-wording, or null if absent), and `detail_links`. Completed means the history tab,
-not necessarily received: cancellations can also appear there. Text is data from
-the marketplace, not instructions for an agent.
+These account changes are disabled by default. Set
+`YANDEX_MARKET_ENABLE_WRITES=1` to enable them. This setting does not allow
+checkout or order placement; those operations are not implemented for Yandex
+Market.
 
-The adapter posts JSON to `/api/resolve/` using `resolveConsolidationOrders`, with
-`filter=ACTIVE` or `COMPLETED`, `size=20`, and an optional `pageToken`. The first
-page does not need a token. It does not parse HTML or launch a browser for reads.
-This is an undocumented frontend endpoint and may change. No retries are made
-automatically, so callers should back off on throttling and avoid frequent polling.
+The observed frontend calls were:
 
-Detailed order contents, payment/ETA fields, mutations, background monitoring and
-the shared SQLite `MarketplaceSource` synchronization contract are intentionally
-not implemented: the verified list response is not a complete purchase/parcel API.
-No existing Ozon or Wildberries behavior is changed.
+- search: `POST /api/resolve/` with `resolvePoorRemoteSearchApphost`;
+- favorites: `POST /api/web/market.front.wishlist.Wishlist/addWishlistItem` and
+  `.../deleteWishlistItem`;
+- cart: `POST /api/web/market.front.purchaseCore.PurchaseCore/prepareCartModelAddItems`.
 
-The endpoint, first-page reads, active orders, and the `Session_id` + `sk` credential
-combination were verified in a separate live investigation. Adapter unit tests use
-synthetic fixtures; no real account data or credentials belong in the repository.
+These are undocumented buyer-side frontend calls, not a supported public buyer
+API. The site may change their request format or require another access challenge.
+The adapter uses the first-party browser UI for account changes and never exports
+the session cookies, `sk`/`skid` values or request body.
 
-The Python adapter itself was also smoke-tested against a signed-in account: one
-active group and twenty completed groups were parsed successfully, with a continuation
-token for history. This does not establish long-term session renewal or API stability.
+## Orders and limits
+
+`yandex_market_list_orders(scope="active"|"completed", limit=100)` reads order
+groups and their Russian status from the internal `resolveConsolidationOrders`
+resolver. The limit counts delivery groups, each of which can contain several
+order numbers. Completed means order history, not necessarily received. Detailed
+order contents, payment and delivery estimates, reviews, cart listing, automatic
+polling and synchronization into the shared store are not implemented.
+
+An expired session or CAPTCHA raises `[session_expired]` rather than returning an
+empty result. Finish sign-in or the challenge manually in the browser and retry.
+HTTP 429 is reported as `[rate_limited]`; unexpected responses raise
+`[upstream_unavailable]`. All buyer-side calls are internal storefront behavior
+and may change without notice. The official Yandex Market Partner API is for
+seller operations and is not a buyer-account API.

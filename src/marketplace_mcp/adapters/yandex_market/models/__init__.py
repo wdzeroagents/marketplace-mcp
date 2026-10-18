@@ -1,0 +1,1 @@
+"""Yandex Market tool models."""

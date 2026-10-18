@@ -127,7 +127,12 @@ _ITEM_QUANTITY_TAG: Final = "itemQuantity"
 _ITEM_STORAGE_TAG: Final = "postingPvzExpiration"
 _PAID_BADGE: Final = "Оплачен"
 # Ozon's status vocabulary; anything else («В пути», «Можно забирать») is active.
-_TERMINAL_STATUSES: Final = {"Получен": OrderState.RECEIVED, "Отменён": OrderState.CANCELLED}
+_TERMINAL_STATUSES: Final = {
+    "Получен": OrderState.RECEIVED,
+    "Получено": OrderState.RECEIVED,
+    "Отменён": OrderState.CANCELLED,
+    "Отменено": OrderState.CANCELLED,
+}
 
 
 def _atom(value: Any) -> str | None:
