@@ -6,28 +6,14 @@ from pydantic import Field
 
 from marketplace_mcp.adapters.ozon.source import OzonSource
 from marketplace_mcp.core.dependencies import run_blocking
-from marketplace_mcp.core.store import connect
 from marketplace_mcp.core.store.dedup import link_duplicates as _link_duplicates
+from marketplace_mcp.core.store.runtime import run_with_store as _run
 from marketplace_mcp.core.store.sync import sync_orders as _sync_orders, sync_prices as _sync_prices
 from marketplace_mcp.core.store.writes import now as _now
 from marketplace_mcp.mcp_server import mcp
-from marketplace_mcp.settings import get_settings
+from marketplace_mcp.settings import get_server_settings
 
 SOURCE: Final = OzonSource()
-
-
-def _run(work: Any) -> Any:
-    """Open the store for one call, hand it to the work, close it again.
-
-    A connection per call rather than one held open: the syncs run on the
-    session thread while a reader may be on another, and SQLite connections are
-    not to be shared across threads.
-    """
-    connection = connect(get_settings().store_path)
-    try:
-        return work(connection)
-    finally:
-        connection.close()
 
 
 @mcp.tool()
@@ -90,7 +76,7 @@ async def store_stats() -> dict[str, Any]:
         ).fetchone()
         out["prices_from"], out["prices_to"] = span["a"], span["b"]
         out["marketplace"] = SOURCE.name
-        out["path"] = str(get_settings().store_path)
+        out["path"] = str(get_server_settings().store_path)
         out["recent_syncs"] = [
             dict(row)
             for row in store.execute(
