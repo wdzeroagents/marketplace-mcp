@@ -16,21 +16,27 @@ def list_orders(
     """List stored orders, with each marketplace's original status text."""
     queries = {
         "all": (
-            ("SELECT order_number, state, status, status_date, paid_total, payment_method "
-            "FROM orders WHERE marketplace = ? "
-            "ORDER BY COALESCE(status_date, synced_at) DESC, order_number DESC LIMIT ?"),
+            (
+                "SELECT order_number, state, status, status_date, paid_total, payment_method "
+                "FROM orders WHERE marketplace = ? "
+                "ORDER BY COALESCE(status_date, synced_at) DESC, order_number DESC LIMIT ?"
+            ),
             (marketplace, limit),
         ),
         "active": (
-            ("SELECT order_number, state, status, status_date, paid_total, payment_method "
-            "FROM orders WHERE marketplace = ? AND state = ? "
-            "ORDER BY COALESCE(status_date, synced_at) DESC, order_number DESC LIMIT ?"),
+            (
+                "SELECT order_number, state, status, status_date, paid_total, payment_method "
+                "FROM orders WHERE marketplace = ? AND state = ? "
+                "ORDER BY COALESCE(status_date, synced_at) DESC, order_number DESC LIMIT ?"
+            ),
             (marketplace, "active", limit),
         ),
         "completed": (
-            ("SELECT order_number, state, status, status_date, paid_total, payment_method "
-            "FROM orders WHERE marketplace = ? AND state IN (?, ?) "
-            "ORDER BY COALESCE(status_date, synced_at) DESC, order_number DESC LIMIT ?"),
+            (
+                "SELECT order_number, state, status, status_date, paid_total, payment_method "
+                "FROM orders WHERE marketplace = ? AND state IN (?, ?) "
+                "ORDER BY COALESCE(status_date, synced_at) DESC, order_number DESC LIMIT ?"
+            ),
             (marketplace, "received", "cancelled", limit),
         ),
     }
