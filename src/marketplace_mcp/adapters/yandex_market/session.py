@@ -4,6 +4,7 @@ import atexit
 import json
 import os
 import threading
+import time
 from contextlib import suppress
 from functools import cache
 from pathlib import Path
@@ -16,6 +17,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from marketplace_mcp.core.browser import get_playwright
 from marketplace_mcp.core.errors import ErrorCode, MarketplaceError
+from marketplace_mcp.settings import get_server_settings
 
 HOME = "https://market.yandex.ru"
 ORDERS_PATH = "/my/orders"
@@ -216,9 +218,12 @@ class YandexMarketSession:
         self._playwright: Any = None
         self._context: Any = None
         self._page: Any = None
+        self._browser_last_used = 0.0
 
     def _ensure_browser(self) -> None:
+        self._close_idle_browser()
         if self._page is not None:
+            self._browser_last_used = time.monotonic()
             return
         self.settings.profile_dir.mkdir(parents=True, exist_ok=True)
         if os.name != "nt":
@@ -237,6 +242,16 @@ class YandexMarketSession:
         pages = self._context.pages
         self._page = pages[0] if pages else self._context.new_page()
         self._page.set_default_timeout(self.settings.browser_timeout * 1000)
+        self._browser_last_used = time.monotonic()
+
+    def _close_idle_browser(self) -> None:
+        if (
+            self._context is not None
+            and self._browser_last_used > 0
+            and get_server_settings().idle_seconds > 0
+            and time.monotonic() - self._browser_last_used >= get_server_settings().idle_seconds
+        ):
+            self.close()
 
     def open_login(self) -> YandexMarketSessionStatus:
         """Open the persistent browser at the buyer orders page for sign-in."""
