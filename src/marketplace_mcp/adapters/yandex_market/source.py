@@ -1,7 +1,7 @@
 """Yandex Market orders, expressed in the shared store's records."""
 
 from collections.abc import Iterable
-from typing import Any, Literal
+from typing import Literal
 
 from marketplace_mcp.adapters.yandex_market import orders
 from marketplace_mcp.adapters.yandex_market.session import YandexMarketSession, get_session
@@ -67,7 +67,7 @@ class YandexMarketSource:
         ]
 
 
-def _optional_text(value: Any) -> str | None:
+def _optional_text(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
@@ -84,4 +84,3 @@ def _state(status: str | None, scope: str) -> OrderState:
         # until we have a confirmed final-state mapping for that wording.
         return OrderState.ACTIVE
     return OrderState.ACTIVE
-
