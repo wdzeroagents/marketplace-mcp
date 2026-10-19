@@ -19,12 +19,13 @@ import os
 import threading
 import time
 from atexit import register as register_atexit
+from contextlib import suppress
 from functools import cache
 from pathlib import Path
 from typing import Any, Final, Self
 
 from curl_cffi import requests
-from playwright.sync_api import Error as PlaywrightError, sync_playwright
+from playwright.sync_api import Error as PlaywrightError
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -34,6 +35,7 @@ from marketplace_mcp.adapters.wildberries.constants import (
     PURCHASES_PAGE,
     TOKEN_STORAGE_KEY,
 )
+from marketplace_mcp.core.browser import get_playwright
 from marketplace_mcp.core.errors import ErrorCode, MarketplaceError
 
 logger = logging.getLogger(__name__)
@@ -114,7 +116,7 @@ class WildberriesSession:
             self._profile.chmod(0o700)
         from marketplace_mcp.adapters.ozon.constants import LAUNCH_ARGS  # ruff: ignore[import-outside-top-level]
 
-        self._playwright = sync_playwright().start()
+        self._playwright = get_playwright()
         options: dict[str, Any] = {
             "user_data_dir": str(self._profile),
             "headless": False,
@@ -166,13 +168,11 @@ class WildberriesSession:
             )
 
     def _close_browser(self) -> None:
-        if self._context is not None:
-            self._context.close()
-            self._context = None
-        if self._playwright is not None:
-            self._playwright.stop()
-            self._playwright = None
-        self._page = None
+        # Another adapter may still be using the shared Playwright driver.
+        with suppress(Exception):
+            if self._context is not None:
+                self._context.close()
+        self._context = self._page = self._playwright = None
 
     # -- the token -----------------------------------------------------------
 
