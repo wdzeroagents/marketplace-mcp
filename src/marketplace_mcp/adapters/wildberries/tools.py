@@ -51,9 +51,7 @@ async def wildberries_sync_orders(
     or unknown statuses are re-read.
     """
     source = WildberriesSource(get_session())
-    report = await run_blocking(
-        lambda: _with_store(lambda store: _sync_orders(store, source, full=full, limit=limit))
-    )
+    report = await run_blocking(lambda: _with_store(lambda store: _sync_orders(store, source, full=full, limit=limit)))
     return report.__dict__
 
 
