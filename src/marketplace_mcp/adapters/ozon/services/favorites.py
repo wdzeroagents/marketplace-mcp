@@ -11,6 +11,7 @@ import re
 from typing import Final
 
 from marketplace_mcp.adapters.ozon.dependencies import get_session
+from marketplace_mcp.adapters.ozon.errors import OzonError as MarketplaceError
 from marketplace_mcp.adapters.ozon.models.catalog import Tile
 from marketplace_mcp.adapters.ozon.models.common import WriteResult
 from marketplace_mcp.adapters.ozon.models.enums import ListKind
@@ -19,7 +20,7 @@ from marketplace_mcp.adapters.ozon.parsing import catalog as catalog_parse
 from marketplace_mcp.adapters.ozon.parsing.common import find_all
 from marketplace_mcp.adapters.ozon.parsing.lists import parse_list_membership, parse_wishlists
 from marketplace_mcp.adapters.ozon.services import monitoring
-from marketplace_mcp.core.errors import MarketplaceError, WritesDisabledError
+from marketplace_mcp.core.errors import WritesDisabledError
 from marketplace_mcp.settings import get_settings
 
 # Ozon reports neither success nor refusal for these actions, so the honest
