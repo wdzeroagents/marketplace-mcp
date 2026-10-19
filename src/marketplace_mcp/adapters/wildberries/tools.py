@@ -7,18 +7,9 @@ from pydantic import Field
 from marketplace_mcp.adapters.wildberries.session import WildberriesSessionStatus, get_session
 from marketplace_mcp.adapters.wildberries.source import WildberriesSource
 from marketplace_mcp.core.dependencies import run_blocking
-from marketplace_mcp.core.store import connect
+from marketplace_mcp.core.store.runtime import run_with_store as _with_store
 from marketplace_mcp.core.store.sync import sync_orders as _sync_orders, sync_prices as _sync_prices
 from marketplace_mcp.mcp_server import mcp
-from marketplace_mcp.settings import get_settings
-
-
-def _with_store(work: Any) -> Any:
-    connection = connect(get_settings().store_path)
-    try:
-        return work(connection)
-    finally:
-        connection.close()
 
 
 @mcp.tool()
