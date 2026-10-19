@@ -45,9 +45,17 @@ class PickupPoints:
 
         addresses: dict[int, str] = {}
         for group in groups if isinstance(groups, list) else []:
-            for office in (group or {}).get("items") or []:
-                if isinstance(office, dict) and "id" in office and office.get("address"):
-                    addresses[int(office["id"])] = str(office["address"])
+            if not isinstance(group, dict):
+                continue
+            offices = group.get("items")
+            for office in offices if isinstance(offices, list) else []:
+                if not isinstance(office, dict) or office.get("address") is None:
+                    continue
+                try:
+                    office_id = int(office["id"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                addresses[office_id] = str(office["address"])
         logger.info("pickup directory holds %d points", len(addresses))
         return addresses
 
