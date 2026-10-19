@@ -50,7 +50,8 @@ def test_the_server_explains_itself() -> None:
     # A caller has to be able to branch on a failure, and to know that a
     # failure is not an empty answer.
     assert "[rate_limited]" in instructions
-    assert "different answers" in instructions
+    assert "Wildberries syncs buyer orders and prices" in instructions
+    assert "yandex_market_sync_orders()" in instructions
     assert "yandex_market_sync_orders()" in instructions
     assert "becomes available after" not in instructions
 
