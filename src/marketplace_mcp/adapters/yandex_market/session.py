@@ -146,6 +146,39 @@ _CART_CONTAINS_SCRIPT = """
 """
 
 
+_ORDER_DETAIL_SCRIPT = """
+() => {
+  const norm = value => (value || '').replace(/\s+/g, ' ').trim();
+  const page = document.querySelector('[data-auto="order-page"]');
+  const details = document.querySelector('[data-auto="order-details"]');
+  if (!page || !details) return null;
+  const statusPattern = /(получен|доставлен|отмен[её]н|возвращ[её]н|в пути|сборк|ожидает|передан курьеру|готов к выдаче)/i;
+  const status = [...details.querySelectorAll('*')]
+    .filter(element => element.children.length === 0)
+    .map(element => norm(element.innerText))
+    .find(text => text && text.length < 180 && statusPattern.test(text)) || null;
+  const items = [...details.querySelectorAll('[data-auto="order-item"]')].map(item => {
+    const links = [...item.querySelectorAll('a[href*="/card/"]')];
+    const link = links.find(anchor => /\/\d+\/?$/.test(new URL(anchor.href).pathname));
+    let sku = null;
+    let url = null;
+    if (link) {
+      const path = new URL(link.href).pathname;
+      sku = path.match(/\/(\d+)\/?$/)?.[1] || null;
+      url = location.origin + path;
+    }
+    const title = links.map(anchor => norm(anchor.innerText)).find(text => text && text.length > 2) || null;
+    const text = norm(item.innerText);
+    const price = text.match(/([\d\s\u00a0]+(?:[,.]\d{1,2})?)\s*₽/)?.[1]?.replace(/[\s\u00a0]+/g, ' ')?.trim() || null;
+    return {sku, title, url, price};
+  }).filter(item => item.sku || item.title);
+  const body = norm(details.innerText);
+  const totalLine = body.split(/(?=Итого)/i).find(line => /^Итого/i.test(line));
+  const paidTotal = totalLine?.match(/([\d\s\u00a0]+(?:[,.]\d{1,2})?)\s*₽/)?.[1]?.replace(/[\s\u00a0]+/g, ' ')?.trim() || null;
+  return {status, items, paid_total: paidTotal};
+}
+"""
+
 class YandexMarketError(MarketplaceError):
     def __init__(self, code: ErrorCode, message: str) -> None:
         self.code = code
@@ -385,6 +418,22 @@ class YandexMarketSession:
         if not isinstance(answer, dict):
             raise YandexMarketError(ErrorCode.UPSTREAM, "Yandex Market returned an unexpected response.")
         return answer
+
+    def order_detail(self, order_number: str) -> dict[str, Any]:
+        """Read the buyer order's SSR detail page without exposing profile data."""
+        if not order_number.isascii() or not order_number.isdigit() or len(order_number) > 32:
+            raise ValueError("Expected a numeric Yandex Market order number")
+        with self._lock:
+            self._navigate(f"/my/order/{quote(order_number, safe='')}")
+            result = self._page.evaluate(_ORDER_DETAIL_SCRIPT)
+        if not isinstance(result, dict) or not isinstance(result.get("items"), list):
+            raise YandexMarketError(
+                ErrorCode.UPSTREAM,
+                "Yandex Market order details are incomplete or have changed.",
+            )
+        if any(not isinstance(item, dict) for item in result["items"]):
+            raise YandexMarketError(ErrorCode.UPSTREAM, "Yandex Market order items are incomplete or have changed.")
+        return result
 
     def close(self) -> None:
         """Flush and close the browser profile at process shutdown."""
