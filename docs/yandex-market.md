@@ -53,9 +53,27 @@ the session cookies, `sk`/`skid` values or request body.
 `yandex_market_list_orders(scope="active"|"completed", limit=100)` reads order
 groups and their Russian status from the internal `resolveConsolidationOrders`
 resolver. The limit counts delivery groups, each of which can contain several
-order numbers. Completed means order history, not necessarily received. Detailed
-order contents, payment and delivery estimates, reviews, cart listing, automatic
-polling and synchronization into the shared store are not implemented.
+order numbers. `yandex_market_sync_orders()` writes individual order numbers,
+the original status and the visible product lines into the shared store. Read
+the saved orders with `marketplace_orders(marketplace="yandex_market")` and
+`marketplace_order_details(marketplace="yandex_market", order_number=...)`.
+
+The list uses `POST /api/resolve/` with
+`resolveConsolidationOrders:resolveConsolidationOrders`; the browser supplies
+its cookies and the short-lived `sk` request value. Order details load from
+`/my/order/{order_number}` as server-rendered HTML. No dedicated JSON or
+GraphQL detail endpoint was confirmed. The adapter reads the visible order
+status, item titles, product IDs and displayed prices from that page. It does
+not copy recipient names or delivery addresses. Yandex does not expose a stable
+shipment ID in the observed page, so the shared-store parcel-shaped record uses
+the explicit key `yandex-order:{order_number}`; it represents order-level items,
+not a verified physical parcel. Payment method, parcel split and delivery
+address remain unavailable.
+
+Completed means order history, not necessarily received; the original status
+text is preserved, and unknown final-state wording remains re-readable. There
+is no automatic polling. Product purchase history, payment and delivery
+estimates, reviews, and cart listing are not implemented.
 
 An expired session or CAPTCHA raises `[session_expired]` rather than returning an
 empty result. Finish sign-in or the challenge manually in the browser and retry.
