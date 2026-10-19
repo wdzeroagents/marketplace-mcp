@@ -15,7 +15,9 @@ results, or logs. A missing or rejected session is reported with the common
 The profile defaults to `/data/wildberries-profile` and can be changed with
 `WILDBERRIES_PROFILE_DIR`. Set `WILDBERRIES_BROWSER_CHANNEL` to `msedge` or
 `chrome` to use an installed browser. To sign out completely, stop the server
-and remove that profile directory.
+and remove that profile directory. An idle context is closed lazily after
+`MARKETPLACE_IDLE_SECONDS` (default 600); the timeout is checked on the next
+browser operation, which reopens the saved profile.
 
 ## Tools
 
@@ -30,8 +32,8 @@ and remove that profile directory.
 - `marketplace_order_details(marketplace="wildberries", order_number=...)`
   returns a stored order with its parcels and item details.
 
-The store path is shared with Ozon and configured through `OZON_STORE_PATH`
-(default `/data/store.db`). Marketplace IDs are part of every key, so equal
+The store path is shared with every adapter and configured through
+`MARKETPLACE_STORE_PATH` (default `/data/store.db`). Marketplace IDs are part of every key, so equal
 order numbers or product IDs from different marketplaces do not overwrite one
 another.
 
