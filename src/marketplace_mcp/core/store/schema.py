@@ -141,9 +141,14 @@ def connect(path: str | Path) -> sqlite3.Connection:
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     connection.execute("PRAGMA journal_mode = WAL")
-    connection.executescript(_SCHEMA)
-
-    _bring_up_to_date(connection, path)
+    version = connection.execute("PRAGMA user_version").fetchone()[0]
+    if version == 1:
+        # The current indexes refer to the marketplace column that v1 lacks;
+        # rebuild the old tables before applying the current schema script.
+        _bring_up_to_date(connection, path)
+    else:
+        connection.executescript(_SCHEMA)
+        _bring_up_to_date(connection, path)
     connection.commit()
     return connection
 
