@@ -19,6 +19,7 @@ from typing import Any, Final
 from uuid import uuid4
 
 from marketplace_mcp.adapters.ozon.dependencies import get_session
+from marketplace_mcp.adapters.ozon.errors import OzonError as MarketplaceError
 from marketplace_mcp.adapters.ozon.models.checkout import Checkout, Delivery, OrderPlaced, PaymentOption, PickupPoint
 from marketplace_mcp.adapters.ozon.models.enums import PostPaymentScope
 from marketplace_mcp.adapters.ozon.parsing.checkout import (
@@ -32,7 +33,7 @@ from marketplace_mcp.adapters.ozon.parsing.checkout import (
     shipment_total,
 )
 from marketplace_mcp.adapters.ozon.parsing.common import widget
-from marketplace_mcp.core.errors import MarketplaceError, OrdersDisabledError, TotalMismatchError
+from marketplace_mcp.core.errors import OrdersDisabledError, TotalMismatchError
 from marketplace_mcp.core.utils.money import to_kopecks
 from marketplace_mcp.settings import get_settings
 
