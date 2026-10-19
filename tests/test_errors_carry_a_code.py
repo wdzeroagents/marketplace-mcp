@@ -1,5 +1,6 @@
 """An error's code is what a caller branches on; its text is what a person reads."""
 
+from marketplace_mcp.adapters.ozon.errors import OzonError
 from marketplace_mcp.core.errors import (
     ErrorCode,
     MarketplaceError,
@@ -13,7 +14,8 @@ from marketplace_mcp.core.errors import (
 
 
 def test_every_error_names_itself() -> None:
-    assert MarketplaceError("что-то").code is ErrorCode.OZON
+    assert MarketplaceError("что-то").code is ErrorCode.MARKETPLACE
+    assert OzonError("что-то").code is ErrorCode.OZON
     assert UpstreamError(502).code is ErrorCode.UPSTREAM
     assert RateLimitedError(3.0).code is ErrorCode.RATE_LIMITED
     assert WritesDisabledError().code is ErrorCode.WRITES_DISABLED
