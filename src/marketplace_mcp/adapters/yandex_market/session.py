@@ -10,10 +10,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from playwright.sync_api import Error as PlaywrightError, sync_playwright
+from playwright.sync_api import Error as PlaywrightError
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from marketplace_mcp.core.browser import get_playwright
 from marketplace_mcp.core.errors import ErrorCode, MarketplaceError
 
 HOME = "https://market.yandex.ru"
@@ -222,7 +223,7 @@ class YandexMarketSession:
         self.settings.profile_dir.mkdir(parents=True, exist_ok=True)
         if os.name != "nt":
             self.settings.profile_dir.chmod(0o700)
-        self._playwright = sync_playwright().start()
+        self._playwright = get_playwright()
         options: dict[str, Any] = {
             "user_data_dir": str(self.settings.profile_dir),
             "headless": False,
@@ -443,10 +444,10 @@ class YandexMarketSession:
     def close(self) -> None:
         """Flush and close the browser profile at process shutdown."""
         with self._lock:
-            for obj, method in ((self._context, "close"), (self._playwright, "stop")):
-                with suppress(Exception):
-                    if obj is not None:
-                        getattr(obj, method)()
+            # Another adapter may still be using the shared Playwright driver.
+            with suppress(Exception):
+                if self._context is not None:
+                    self._context.close()
             self._playwright = self._context = self._page = None
 
 
