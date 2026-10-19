@@ -13,127 +13,88 @@ from typing import Final
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from marketplace_mcp.settings import get_settings
+from marketplace_mcp.settings import get_server_settings
 
-INSTRUCTIONS: Final = """This server includes buyer adapters for Ozon, Wildberries, and Yandex Market, with different
-capabilities. Ozon tools use the signed-in Ozon account. Wildberries and Yandex Market keep separate
-persistent browser profiles and do not require an Ozon login.
+INSTRUCTIONS: Final = """Overview
+This server has independent buyer adapters for Ozon, Wildberries, and Yandex Market. Signing in to
+one marketplace does not sign in to another. Ozon has account, catalog, checkout, and finance tools;
+Wildberries syncs buyer orders and prices; Yandex Market has catalog tools, gated cart/favorites,
+and buyer orders. Browser profiles and permissions are separate.
 
-For Wildberries, call wildberries_open_login() and sign in in the browser, then check
-wildberries_session_status(). Call wildberries_sync_orders() to save orders and parcel details, then
-read them with marketplace_orders(marketplace="wildberries") and
-marketplace_order_details(marketplace="wildberries", order_number=...).
-wildberries_sync_prices() records historical purchase prices, not current catalogue prices. The
-profile defaults to /data/wildberries-profile; token and cookies stay out of MCP arguments and logs.
+Shared store
+Sync before reading when the local copy may be empty or stale: Ozon uses sync_orders(), Wildberries
+uses wildberries_sync_orders(), and Yandex Market uses yandex_market_sync_orders(). Read normalized
+orders with marketplace_orders(marketplace=...) and details with
+marketplace_order_details(marketplace=..., order_number=...). Status text stays in the marketplace's
+own wording. Ozon and Wildberries expose parcel details; Yandex Market provides order-level items
+only, stored under one synthetic parcel key, yandex-order:{order_number}. Its store omits payment
+method, parcel splits, recipient, and delivery address.
 
-The shared marketplace_orders() and marketplace_order_details() tools read normalized data from the
-local store. Sync the selected marketplace first. Use marketplace="ozon", "wildberries", or
-"yandex_market".
+Errors
+Failures carry a leading code such as [upstream_unavailable], [rate_limited], [session_expired],
+[writes_disabled], [orders_disabled], or [total_mismatch]. Branch on the code and relay the message:
+an error is not an empty account. Recover a signed-out session in that marketplace's login flow.
 
-Yandex Market tools use a separate persistent browser profile.
-Call yandex_market_open_login() to sign in or complete a challenge, then verify with
-yandex_market_session_status(). Search and product details read the public storefront; use
-yandex_market_search() then yandex_market_product_details(). yandex_market_add_to_cart() and
-yandex_market_set_favorite() change the signed-in account and are disabled unless
-YANDEX_MARKET_ENABLE_WRITES=1. They verify the resulting page state. The profile defaults to
-/data/yandex-market-profile; cookies and request headers stay inside the browser. Orders are read
-with yandex_market_list_orders(scope="active"|"completed", limit=100); completed does not imply
-received, so use the original Russian status. yandex_market_sync_orders() saves orders to the shared
-store; read them with marketplace_orders(marketplace="yandex_market") and
-marketplace_order_details(marketplace="yandex_market", order_number=...). Yandex exposes order-level
-items, not shipment parcels; the store uses one synthetic parcel key,
-`yandex-order:{order_number}`. Payment method, actual parcel splits, recipient, and delivery address
-are not available to the store. These are internal storefront calls and may change without notice.
+Wildberries
+Call wildberries_open_login(), sign in in its browser, and verify with wildberries_session_status().
+Call wildberries_sync_orders() before reading the shared store. wildberries_sync_prices() records
+historical purchase prices, not current catalog prices. Token and cookies stay out of MCP arguments.
 
-Ozon tools provide read-write access to one ozon.ru buyer account: orders, purchases, returns, cart,
-favorites, collections, product cards, catalog search, checkout, Ozon Card balance and points.
-Everything acts on the signed-in account of a real person, and money is real.
+Yandex Market
+Call yandex_market_open_login(), finish sign-in or any challenge, then verify with
+yandex_market_session_status(). Search public products with yandex_market_search() and
+yandex_market_product_details(). yandex_market_list_orders() reads without saving; use
+yandex_market_sync_orders() to update the shared store. completed does not mean received; use the
+original status text. Cart and favorite changes are disabled unless
+YANDEX_MARKET_ENABLE_WRITES=1. Cookies and request headers stay in its browser profile.
 
-Start with session_status(). It answers three things you cannot guess: whether the session is
-alive, whether you may change anything (writes_enabled) and whether you may place an order
-(orders_enabled). Those two are the operator's settings — no tool can change them, so plan
-around them instead of discovering them halfway through.
+Ozon
+All Ozon tools act on the signed-in buyer account; money is real. Start with session_status(): it
+reports the session, writes_enabled, and orders_enabled gates. The operator controls both gates.
 
-Buying, in order — each step is a precondition for the next:
-  1. find the product: search() -> product_details() and take the SKU of the exact variant
-     (apparel: the size's own SKU, not the base one)
-  2. set_cart_quantity(sku, n)
-  3. select_cart_items([sku, ...], mode="only") — the ticks ARE the order's contents, and
-     get_checkout() sees nothing until something is ticked
-  4. get_checkout() — read it before deciding anything: it lists the payment methods, the
-     pickup points, the pay-on-delivery switch and the money
-  5. configure_checkout(...) with values taken from that answer
-  6. show the user totals.order_total, then place_order(confirm_total=<that figure>)
-  7. if payment is still pending: pay_order(order_number)
-Undo: cancel_order(order_number), optionally skus=[...] for single lines.
+For a purchase, follow this order: search() -> product_details() for the exact SKU (including the
+size-specific SKU for apparel); set_cart_quantity(); select_cart_items(..., mode="only"); read
+get_checkout() for payment methods, pickup points, pay-on-delivery, and totals; configure_checkout()
+from that result; show totals.order_total; then place_order(confirm_total=<shown total>). Use
+pay_order() only when payment remains pending. cancel_order() cancels an order; optional skus target
+individual lines. Selected cart ticks define the order contents, and get_checkout() is empty until
+something is selected.
 
-Two kinds of lists, and they are not interchangeable: wishlists (вишлисты) via
-get_lists / create_list / set_list_membership, and «Подборки» via list_selections /
-selection_products / create_selection / add_to_selection / remove_from_selection —
-curated, publishable, addressed by uuid, and filled only from favorites. A selection's products
-are a separate read: the list states a count only. Publishing a selection is outward-facing — it
-appears on the account owner's public profile, so ask first.
+Wishlists (get_lists / create_list / set_list_membership) differ from curated selections
+(list_selections / selection_products / create_selection / add_to_selection / remove_from_selection).
+Selections are UUID-addressed, publishable, and contain only favorites; read their products
+separately. Publishing appears on the owner's public profile, so ask first.
 
-Two figures, never interchangeable: totals.total is what Ozon charges today, totals.order_total
-is what the order costs. On a pay-on-delivery order today's charge is 0 ₽ — quote order_total to
-the user, or you will tell them a 6 691 ₽ order is free. pay_after_receipt.scope says whether
-deferral covers the whole order ("full"), part of it ("partial", and then pay_now_items /
-pay_on_receipt_items name which lines fall on which side) or nothing ("none").
+Never confuse totals.total (charged now) with totals.order_total (full order cost). Pay-on-delivery
+can make today's charge 0 RUB while the order still costs money. pay_after_receipt.scope is full,
+partial (with pay_now_items and pay_on_receipt_items), or none. list_orders() has no order total;
+use amount_due_at_pickup for collection and each item's price/paid flag only for that item. paid=null
+means unknown. active omits received and cancelled rows; state explains the outcome.
 
-list_orders() states no order total, because Ozon states none. A row carries amount_due_at_pickup
-(«К оплате при получении») and, per item, that item's price and paid true/false. An item's price
-is not the order's; paid null means unknown, not unpaid. "active" leaves out the received and
-cancelled orders Ozon shows among the current ones; state says which is which.
+Product cards show price (the account's bank price), price_regular (other banks), and price_old;
+only price is charged. Use it for ranking. Search limit is depth, not page size, and the cheapest lot
+may be later. Search is literal: search the model without the brand if a listing omits it, then
+verify with product_details() because seller titles may name no model. No exact result means no
+result, even if Ozon shows recommendations. find_cheaper() adds Ozon's own cheaper-or-faster offers.
 
-A product card states three prices and only one is charged: price is «С банками» — what this
-account pays — beside price_regular («С другими банками») and price_old. Rank lots on the first;
-search(sort="cheap") and find_cheaper already do. In search, limit is depth, not page size —
-pages are walked until it is met, and the cheapest lot is regularly not on the first one. Ozon's
-text search is literal: a lot whose own title omits the brand does not come back for a query that
-includes it, so search the model rather than brand-plus-model, and confirm what a lot is with
-product_details() — a tile's title is the seller's wording and may name no model at all. A query
-Ozon finds nothing exact for returns nothing rather than the "you might also like" it fills the
-page with. find_cheaper adds Ozon's own «Есть дешевле или быстрее» offers for that product.
+product_details() returns Ozon's rating, reviews_count, and questions_count; get_reviews() returns a
+star breakdown plus up to limit reviews. count is the product total; fetched is what came back.
+There is no star filter: use sort="worst" and depth. Reviews keep pros and cons separate and name
+their size/color variant. list_orders() dates are status dates; archive ranges are walked down to,
+so cost follows depth rather than range width.
 
-A rating and a review count are Ozon's own numbers: product_details() carries rating,
-reviews_count and questions_count, and get_reviews() adds the breakdown per star plus as many
-reviews as `limit` asks for. count is the product's total and fetched is what came back — quoting
-the second as the first turns 155 847 reviews into 30. There is no filter by star, so the
-complaints are reached with sort="worst" and depth; each review keeps «Достоинства» and
-«Недостатки» apart and names the variant it is about, because a card's reviews cover its sizes
-and colours.
+Purchases list what was ordered, including refused items, without status and at today's catalog
+price. Use bought_items() to check what was received: parcel outcomes can differ within one order.
+The scan reports scanned_orders, scanned_back_to, complete, unresolved, and provisional. Continue
+with bought_items(skus=<unresolved + provisional>, scan_before=<scanned_back_to>) until complete,
+merge by SKU preferring received, and never call unresolved "not bought": the scan has not reached
+it. A first query takes about 40-50 s; each 150-order continuation about 30 s.
 
-list_orders() dates are status dates — when an order was received or cancelled, the only dates the
-archive prints — and a range is walked down to, so the cost is the depth, not the width.
-
-«Купленные товары» (purchases) is a list of what was ordered, not of what arrived: it includes
-items refused at the pickup point, states no status and prices them at today's catalogue price.
-bought_items() answers "did I actually get this" by matching it against the orders, where the
-outcome lives per parcel — one order holds «Получен» and «Отменён» at once. Each order opened is
-a request, so bought_items is bounded and reports its own reach: scanned_orders,
-scanned_back_to, complete, unresolved (never seen) and provisional (seen only as cancelled — an
-older order may have been received, so it is not an answer yet). Keep looking by asking about the
-leftovers, not by raising the bound:
-  bought_items(skus=<unresolved + provisional>, scan_before=<scanned_back_to>)
-repeated until complete, merging by sku and preferring received. Never report unresolved as "not
-bought" — it means nobody looked that far back. Budget: a first call with a query ~40-50 s, each
-continuation of 150 orders ~30 s.
-
-A failure never arrives as an empty result: a 502, a timeout or a rate limit raises, because "no
-orders" and "Ozon did not answer" are different answers. Every error carries a code before its
-sentence — [upstream_unavailable], [rate_limited], [session_expired], [writes_disabled],
-[orders_disabled], [total_mismatch]. Branch on the code; relay the sentence, which is written for
-a person. A signed-out session raises everywhere rather than answering with an empty account:
-recover with start_login(login) and submit_login_code(code), which needs a code only the account
-owner receives — so ask, never guess.
-
-Paying by card finishes on Ozon's bank domain, which asks the account to sign in to the bank —
-this server holds no banking credentials. pay_order drives it to that point and reports what is
-left: the amount, how much to top the card up by, and the page to finish at. Pay-on-delivery
-avoids the whole thing.
-
-Prices, dates and addresses are returned as Ozon renders them, in Russian and in roubles. Pass
-identifiers back exactly as received."""
+Ozon failures never masquerade as an empty result. Recover a signed-out session with
+start_login(login) and submit_login_code(code); ask the account owner for the one-time code. Card
+payment finishes on the bank's domain; this server holds no bank credentials. pay_order() reports
+the amount, any top-up needed, and the page to finish on; pay-on-delivery avoids bank sign-in.
+Prices, dates, and addresses use Ozon's original wording and RUB. Pass identifiers back unchanged."""
 
 
 def _transport_security() -> TransportSecuritySettings:
@@ -143,11 +104,11 @@ def _transport_security() -> TransportSecuritySettings:
     with none named it stays off, or every client using the address it was given
     would be answered 421 by a server that is working correctly.
     """
-    allowed = get_settings().allowed_hosts
+    allowed = get_server_settings().allowed_hosts
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=bool(allowed),
         allowed_hosts=allowed,
     )
 
 
-mcp: Final = FastMCP("ozon", instructions=INSTRUCTIONS, transport_security=_transport_security())
+mcp: Final = FastMCP("marketplace", instructions=INSTRUCTIONS, transport_security=_transport_security())
