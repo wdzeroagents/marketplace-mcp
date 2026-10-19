@@ -190,6 +190,19 @@ def test_product_page_only_accepts_clean_market_card_path() -> None:
         client.product_page("/card/../123456")
 
 
+def test_order_detail_uses_browser_page_and_rejects_invalid_number() -> None:
+    result = {"status": "Получен", "items": [{"sku": "123456", "title": "Чай"}], "paid_total": None}
+    client, page = configured(result)
+
+    assert client.order_detail("987654321") == result
+    assert page.visited == [session.HOME + "/my/order/987654321"]
+    assert 'data-auto="order-details"' in page.script
+    assert 'data-auto="order-item"' in page.script
+
+    with pytest.raises(ValueError, match="numeric Yandex Market order number"):
+        client.order_detail("https://example.com")
+
+
 def test_favorite_and_cart_actions_use_first_party_controls_and_read_back() -> None:
     client = session.YandexMarketSession(session.YandexMarketSettings(profile_dir=Path("yandex-profile-test")))
     page = InteractivePage()
@@ -209,15 +222,3 @@ def test_favorite_and_cart_actions_use_first_party_controls_and_read_back() -> N
 def test_mutation_http_errors_are_coded(status: int, code: str) -> None:
     with pytest.raises(session.YandexMarketError, match=code):
         session.YandexMarketSession._check_mutation_status(status)
-
-def test_order_detail_uses_browser_page_and_rejects_invalid_number() -> None:
-    result = {"status": "Получен", "items": [{"sku": "123456", "title": "Чай"}], "paid_total": None}
-    client, page = configured(result)
-
-    assert client.order_detail("987654321") == result
-    assert page.visited == [session.HOME + "/my/order/987654321"]
-    assert 'data-auto="order-details"' in page.script
-    assert 'data-auto="order-item"' in page.script
-
-    with pytest.raises(ValueError, match="numeric Yandex Market order number"):
-        client.order_detail("https://example.com")
