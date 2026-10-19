@@ -40,8 +40,9 @@ from marketplace_mcp.adapters.ozon.constants import (
     LAUNCH_ARGS,
     WIDGET_URL,
 )
+from marketplace_mcp.adapters.ozon.errors import OzonError as MarketplaceError
 from marketplace_mcp.core.browser import get_playwright
-from marketplace_mcp.core.errors import MarketplaceError, RateLimitedError, SessionExpiredError, UpstreamError
+from marketplace_mcp.core.errors import RateLimitedError, SessionExpiredError, UpstreamError
 from marketplace_mcp.core.utils.observability import (
     BROWSER_ACTIVE,
     SESSION_BOOTSTRAPS,
@@ -49,7 +50,7 @@ from marketplace_mcp.core.utils.observability import (
     UPSTREAM_REQUESTS,
 )
 from marketplace_mcp.core.utils.serde import dumps, loads
-from marketplace_mcp.settings import get_settings
+from marketplace_mcp.settings import get_server_settings, get_settings
 
 logger = logging.getLogger("marketplace_mcp")
 
@@ -109,6 +110,7 @@ class OzonSession:
         self._synced: dict[str, str] = {}
         self._logging_in = False
         self._last_used = 0.0
+        self._browser_last_used = 0.0
 
     # -- browser lifecycle ---------------------------------------------------
     def _launch_browser(self) -> None:
@@ -129,6 +131,7 @@ class OzonSession:
         if fresh:
             self._seed_from_state()
         self._page = self._context.pages[0] if self._context.pages else self._context.new_page()
+        self._browser_last_used = time.monotonic()
         BROWSER_ACTIVE.set(1)
         self._page.goto(HOME_URL, wait_until="domcontentloaded", timeout=self._browser_ms(1.5))
         self._page.wait_for_timeout(12_000)  # let Variti set cookies
@@ -216,8 +219,21 @@ class OzonSession:
         BROWSER_ACTIVE.set(0)
 
     def _ensure_browser(self) -> None:
+        self._close_idle_browser()
         if self._page is None:
             self._launch_browser()
+        else:
+            self._browser_last_used = time.monotonic()
+
+    def _close_idle_browser(self) -> None:
+        idle_seconds = get_server_settings().idle_seconds
+        if (
+            self._context is not None
+            and self._browser_last_used > 0
+            and idle_seconds > 0
+            and time.monotonic() - self._browser_last_used >= idle_seconds
+        ):
+            self._close_browser()
 
     # -- bootstrap: harvest cookies + headers, build the HTTP session --------
     def _bootstrap(self, reason: str = "initial") -> None:
@@ -364,6 +380,7 @@ class OzonSession:
         settings = get_settings()
         attempts = max(1, settings.request_attempts)
         with self._lock:
+            self._close_idle_browser()
             status, text, retry_after = 0, "", None
             started = time.monotonic()
             for attempt in range(1, attempts + 1):
