@@ -4,26 +4,20 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, ge
 from starlette.requests import Request
 from starlette.responses import Response
 
-"""Prometheus instrumentation, self-contained.
-
-Signals are taken at the transport seam rather than per tool: what actually
-breaks in production is the Ozon side (antibot re-challenge, token expiry,
-upstream 4xx/5xx), and that all funnels through one request path. Process-level
-metrics come from prometheus_client's default collectors.
-"""
+"""Prometheus instrumentation shared by the marketplace adapters."""
 
 
 METRICS_PATH: Final = "/metrics"
 
 UPSTREAM_REQUESTS: Final = Counter(
     "marketplace_mcp_upstream_requests_total",
-    "Requests to Ozon, by backend and outcome.",
+    "Requests to a marketplace, by backend and outcome.",
     ["backend", "outcome"],
 )
 
 UPSTREAM_LATENCY: Final = Histogram(
     "marketplace_mcp_upstream_request_seconds",
-    "Latency of requests to Ozon.",
+    "Latency of requests to a marketplace.",
     ["backend"],
 )
 
