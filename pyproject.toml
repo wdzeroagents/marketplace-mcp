@@ -1,7 +1,7 @@
 [project]
 name = "marketplace-mcp"
-version = "1.5.0"
-description = "Model Context Protocol server with Ozon and Yandex Market buyer tools, plus a Wildberries order-data source adapter."
+version = "2.0.0"
+description = "Model Context Protocol server with Ozon, Wildberries, and Yandex Market buyer adapters."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Alexander Zhukov" }]
@@ -32,7 +32,7 @@ dev = ["ruff>=0.6", "ty>=0.0.1a1", "pytest>=8", "pytest-asyncio>=0.23", "pytest-
 
 [tool.uv]
 # ty (Astral's type checker) only ships pre-release builds for now.
-prerelease = "allow"
+prerelease = "explicit"
 
 [tool.ruff]
 line-length = 120
@@ -112,8 +112,7 @@ ignore = [
 # Boolean positional arguments: MCP tools receive flat JSON arguments, so a
 # boolean parameter cannot be made keyword-only.
 "src/marketplace_mcp/adapters/ozon/tools/*.py" = ["boolean-type-hint-positional-argument", "boolean-default-value-positional-argument"]
-"src/marketplace_mcp/adapters/yandex_market/tools_favorites.py" = ["boolean-default-value-positional-argument"]
-"src/marketplace_mcp/adapters/yandex_market/tools.py" = ["boolean-default-value-positional-argument"]
+"src/marketplace_mcp/adapters/yandex_market/tools/*.py" = ["boolean-default-value-positional-argument"]
 "src/marketplace_mcp/adapters/wildberries/tools.py" = ["boolean-default-value-positional-argument"]
 # Same reason: the checkout service mirrors the tool signature.
 "src/marketplace_mcp/adapters/ozon/services/checkout.py" = ["boolean-type-hint-positional-argument"]
@@ -156,7 +155,7 @@ include = ["src"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["tests"]
-addopts = "--cov=src/marketplace_mcp --cov-branch --cov-report=term-missing:skip-covered --cov-fail-under=67"
+addopts = "--cov=src/marketplace_mcp --cov-branch --cov-report=term-missing:skip-covered --cov-fail-under=76"
 
 [tool.coverage.run]
 branch = true
