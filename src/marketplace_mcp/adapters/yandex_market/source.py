@@ -3,7 +3,7 @@
 from collections.abc import Iterable
 from typing import Literal
 
-from marketplace_mcp.adapters.yandex_market import orders
+from marketplace_mcp.adapters.yandex_market.services import orders
 from marketplace_mcp.adapters.yandex_market.session import YandexMarketSession, get_session
 from marketplace_mcp.core.records import OrderRecord, OrderState, ParcelItemRecord, ParcelRecord, ProductRecord
 
