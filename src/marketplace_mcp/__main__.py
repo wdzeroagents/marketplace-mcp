@@ -14,7 +14,7 @@ from starlette.routing import Route
 
 from marketplace_mcp.core.utils.observability import METRICS_PATH, metrics_endpoint
 from marketplace_mcp.main import mcp
-from marketplace_mcp.settings import get_settings
+from marketplace_mcp.settings import get_server_settings
 
 logger = logging.getLogger("marketplace_mcp")
 
@@ -27,7 +27,7 @@ def _configure_logging() -> None:
 
 def main() -> None:
     _configure_logging()
-    settings = get_settings()
+    settings = get_server_settings()
     if settings.transport == "stdio":
         mcp.run()
         return
