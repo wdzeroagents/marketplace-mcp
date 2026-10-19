@@ -21,13 +21,14 @@ import re
 from typing import Any, Final
 
 from marketplace_mcp.adapters.ozon.dependencies import get_session
+from marketplace_mcp.adapters.ozon.errors import OzonError as MarketplaceError
 from marketplace_mcp.adapters.ozon.models.catalog import Tile
 from marketplace_mcp.adapters.ozon.models.common import WriteResult
 from marketplace_mcp.adapters.ozon.models.lists import Selection
 from marketplace_mcp.adapters.ozon.parsing.catalog import parse_tiles
 from marketplace_mcp.adapters.ozon.parsing.common import widget
 from marketplace_mcp.adapters.ozon.parsing.selections import parse_selections
-from marketplace_mcp.core.errors import MarketplaceError, WritesDisabledError
+from marketplace_mcp.core.errors import WritesDisabledError
 from marketplace_mcp.core.utils.serde import dumps
 from marketplace_mcp.settings import get_settings
 
