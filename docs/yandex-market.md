@@ -8,6 +8,9 @@ copy them into MCP arguments or environment variables. The profile defaults to
 `/data/yandex-market-profile`; set `YANDEX_MARKET_PROFILE_DIR` to choose another
 location. On Windows, `YANDEX_MARKET_BROWSER_CHANNEL` can select an installed
 browser such as `msedge` or `chrome`.
+The browser context closes lazily after `MARKETPLACE_IDLE_SECONDS` (default
+600); the timeout is checked on the next browser operation, which reopens the
+saved profile.
 
 ## Catalog
 
