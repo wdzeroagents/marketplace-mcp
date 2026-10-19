@@ -30,7 +30,6 @@ from typing import Any, Final, Self
 from urllib.parse import quote
 
 from curl_cffi import requests as curl_requests
-from playwright.sync_api import sync_playwright
 
 from marketplace_mcp.adapters.ozon.constants import (
     ACTION_URL,
@@ -41,6 +40,7 @@ from marketplace_mcp.adapters.ozon.constants import (
     LAUNCH_ARGS,
     WIDGET_URL,
 )
+from marketplace_mcp.core.browser import get_playwright
 from marketplace_mcp.core.errors import MarketplaceError, RateLimitedError, SessionExpiredError, UpstreamError
 from marketplace_mcp.core.utils.observability import (
     BROWSER_ACTIVE,
@@ -117,7 +117,7 @@ class OzonSession:
         fresh = not (self._profile / "Default").exists()
         self._profile.mkdir(parents=True, exist_ok=True)
         self._clear_stale_lock()
-        self._playwright = sync_playwright().start()
+        self._playwright = get_playwright()
         self._context = self._playwright.chromium.launch_persistent_context(
             user_data_dir=str(self._profile),
             headless=False,
@@ -209,12 +209,9 @@ class OzonSession:
             logger.info("seeded %d cookies from %s into a fresh profile", len(cookies), self._seed_state)
 
     def _close_browser(self) -> None:
-        for obj, method in ((self._context, "close"), (self._playwright, "stop")):
-            try:
-                if obj is not None:
-                    getattr(obj, method)()
-            except Exception:
-                logger.debug("browser teardown error", exc_info=True)
+        with suppress(Exception):
+            if self._context is not None:
+                self._context.close()
         self._playwright = self._context = self._page = None
         BROWSER_ACTIVE.set(0)
 
