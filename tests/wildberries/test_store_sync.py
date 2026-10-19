@@ -8,23 +8,27 @@ from marketplace_mcp.core.store.sync import sync_orders
 
 class FakeSession:
     def post(self, _url: str, _body: Any) -> dict[str, Any]:
-        return {"value": {"archive": [
-            {
-                "orderId": "wb-order-1",
-                "code1S": 123456,
-                "name": "Jacket",
-                "brand": "Brand",
-                "size": "M",
-                "color": "blue",
-                "rawPrice": 123456,
-                "status": "Purchased",
-                "orderDate": "2026-10-10T10:00:00Z",
-                "lastDate": "2026-10-11T10:00:00Z",
-                "officeId": 211648,
-                "sellerId": 17,
-                "paymentType": "CARD",
+        return {
+            "value": {
+                "archive": [
+                    {
+                        "orderId": "wb-order-1",
+                        "code1S": 123456,
+                        "name": "Jacket",
+                        "brand": "Brand",
+                        "size": "M",
+                        "color": "blue",
+                        "rawPrice": 123456,
+                        "status": "Purchased",
+                        "orderDate": "2026-10-10T10:00:00Z",
+                        "lastDate": "2026-10-11T10:00:00Z",
+                        "officeId": 211648,
+                        "sellerId": 17,
+                        "paymentType": "CARD",
+                    }
+                ]
             }
-        ]}}
+        }
 
 
 class NoImages:
