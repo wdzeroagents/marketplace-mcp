@@ -1,25 +1,13 @@
 """MCP reads shared by every marketplace that syncs to the local store."""
 
-import sqlite3
-from collections.abc import Callable
-from typing import Annotated, TypeVar
+from typing import Annotated
 
 from pydantic import Field
 
 from marketplace_mcp.core.dependencies import run_blocking
-from marketplace_mcp.core.store import connect, read
+from marketplace_mcp.core.store import read
+from marketplace_mcp.core.store.runtime import run_with_store as _run
 from marketplace_mcp.mcp_server import mcp
-from marketplace_mcp.settings import get_settings
-
-T = TypeVar("T")
-
-
-def _run[T](work: Callable[[sqlite3.Connection], T]) -> T:
-    connection = connect(get_settings().store_path)
-    try:
-        return work(connection)
-    finally:
-        connection.close()
 
 
 @mcp.tool()
