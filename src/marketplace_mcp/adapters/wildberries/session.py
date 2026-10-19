@@ -37,6 +37,7 @@ from marketplace_mcp.adapters.wildberries.constants import (
 )
 from marketplace_mcp.core.browser import get_playwright
 from marketplace_mcp.core.errors import ErrorCode, MarketplaceError
+from marketplace_mcp.settings import get_server_settings
 
 logger = logging.getLogger(__name__)
 
@@ -107,9 +108,12 @@ class WildberriesSession:
         self._playwright: Any = None
         self._context: Any = None
         self._page: Any = None
+        self._browser_last_used = 0.0
 
     def _ensure_browser(self) -> None:
+        self._close_idle_browser()
         if self._page is not None:
+            self._browser_last_used = time.monotonic()
             return
         self._profile.mkdir(parents=True, exist_ok=True)
         if os.name != "nt":
@@ -131,6 +135,16 @@ class WildberriesSession:
         pages = self._context.pages
         self._page = pages[0] if pages else self._context.new_page()
         self._page.set_default_timeout(self.settings.browser_timeout * 1000)
+        self._browser_last_used = time.monotonic()
+
+    def _close_idle_browser(self) -> None:
+        if (
+            self._context is not None
+            and self._browser_last_used > 0
+            and get_server_settings().idle_seconds > 0
+            and time.monotonic() - self._browser_last_used >= get_server_settings().idle_seconds
+        ):
+            self._close_browser()
 
     def open_login(self) -> WildberriesSessionStatus:
         """Open a visible persistent profile and leave it available for sign-in."""
