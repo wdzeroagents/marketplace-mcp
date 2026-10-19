@@ -1,363 +1,63 @@
-***English** · [Русский](README.ru.md)*
+*English* · [Русский](README.ru.md)
 
 # Marketplace MCP
 
-An [MCP](https://modelcontextprotocol.io/) server with adapters for three
-marketplaces. Their capabilities are separate:
+MCP server for buyer accounts on Ozon, Wildberries, and Yandex Market. Each adapter has a separate browser profile, login, and permissions.
 
-| Marketplace | Adapter capability |
+| Adapter | Available tools |
 |---|---|
-| Ozon | MCP tools for the signed-in buyer account: orders, purchases, returns, cart, favorites, lists, catalog, checkout and finances. Some tools can change the account when explicitly enabled. |
-| Wildberries | Buyer sign-in, order and purchase sync, plus shared tools to read normalized orders and parcel details from the local store. |
-| Yandex Market | Buyer orders synced to the shared store, storefront search and product details, plus gated cart and favorite changes. |
-
-The detailed setup and tool reference below describe the Ozon adapter. Each
-marketplace has its own session and request behavior; see the [Yandex Market
-notes](docs/yandex-market.md) and [Wildberries adapter notes](docs/wildberries.md).
-
-The Ozon adapter has no public API for these account features. It talks to the same internal
-`composer-api` / `entrypoint-api` endpoints the site's own frontend uses, under
-your authenticated session.
+| Ozon | Orders and returns, purchase history, catalog, cart, favorites and lists, checkout, finance |
+| Wildberries | Login, order and historical price synchronization |
+| Yandex Market | Login, product search and details, order listing and synchronization, gated cart and favorites |
+| Shared store | Normalized order lists and order details across adapters |
 
 ## Requirements
 
-- **A Russian IP.** Ozon blocks datacenter and VPN egress.
-- **A real Chromium.** Headless is detected; the image runs it under Xvfb.
-- **One interactive login**, performed once against the profile directory.
-- `--shm-size=1g`. Chromium crashes on Docker's default 64 MB.
+All adapters use persistent Chromium profiles. Docker runs Chromium under Xvfb; allocate shared memory with --shm-size=1g and mount /data to persistent storage. Keep the volume private because profiles grant access to buyer accounts. Calls from all adapters use one worker thread and run sequentially, so a long Ozon scan or a pending login blocks calls to the other marketplaces.
 
-## How it works
+The Ozon adapter is documented to require a Russian IP. A Russian-IP requirement for Wildberries and Yandex Market has not been verified; network restrictions can depend on the account and location.
 
-The Variti antibot blocks non-browser clients, but a browser only has to pass
-the challenge once. A real Chromium starts, passes it, and hands over its
-cookies and the exact client-hint header set; from then on every read and write
-is a direct HTTP call through [`curl_cffi`](https://github.com/lexiforest/curl_cffi)
-with Chrome's TLS fingerprint. No tool renders a page, which is why a call takes
-about 0.2 s instead of 15. The browser stays only to own the profile, refresh
-the session, and serve as the fallback for one reading — the delivery estimate.
+## Quick start
 
-The session lives in a **persistent Chromium profile**, not a cookie snapshot.
-OzonID, the auth realm guarding checkout, keeps its state outside cookies and
-localStorage, so a Playwright `storage_state` snapshot silently loses it and
-checkout falls back to a login prompt. A profile directory keeps everything, so
-one login stays valid and the server runs unattended.
+For local development, install dependencies and Chromium, then start the server:
 
-Playwright's sync API cannot run inside a live event loop, and its objects
-belong to the thread that created them, so tool calls are dispatched to a single
-worker thread. They are therefore serialised, and a slow one — a bootstrap, a
-login — makes the others wait.
+    uv sync
+    uv run playwright install --with-deps chromium
+    uv run python -m marketplace_mcp
+
+For Docker:
+
+    docker build -t marketplace-mcp .
+    docker run -i --rm --shm-size=1g -v /opt/marketplace-mcp:/data marketplace-mcp
+
+The default transport is stdio. For a long-running HTTP server set MARKETPLACE_TRANSPORT=http and publish port 8084. The same port serves /mcp and /metrics.
+
+Sign in separately using ozon session tools, wildberries_open_login(), or yandex_market_open_login(). The session-status tool for each adapter confirms access. Credentials and cookies stay inside their own profiles.
+
+## Shared behavior
+
+Sync orders before reading the local copy when it may be empty or stale: Ozon uses sync_orders(), Wildberries uses wildberries_sync_orders(), and Yandex Market uses yandex_market_sync_orders(). Then use marketplace_orders(marketplace=...) and marketplace_order_details(marketplace=..., order_number=...). Marketplace IDs are part of database keys.
+
+An idle browser context is closed lazily after MARKETPLACE_IDLE_SECONDS (default 600 seconds); the timeout is checked when the next browser operation begins. The saved profile remains and is reopened on demand. Zero disables idle closing.
+
+Errors carry a code such as [session_expired], [rate_limited], or [upstream_unavailable]. An error is not an empty account. Account-changing tools are gated by adapter settings. Ozon checkout can spend money and has a separate gate.
 
 ## Tools
 
-**Orders and returns**
+Ozon: list_orders, order_products, order_parcels, purchases, bought_items, list_returns, search, get_search_filters, product_details, get_reviews, get_description, delivery_estimate, find_cheaper, get_cart, set_cart_quantity, select_cart_items, list_favorites, set_favorite, get_lists, create_list, delete_list, set_list_membership, check_favorite_price_drops, list_selections, get_selection, selection_products, create_selection, add_to_selection, remove_from_selection, set_selection_items, edit_selection, set_selection_public, delete_selection, get_checkout, configure_checkout, place_order, pay_order, list_cancel_reasons, cancel_order, session_status, start_login, submit_login_code, get_finances, get_points, sync_orders, sync_prices, store_stats, link_duplicates.
 
-| Tool | |
-|---|---|
-| `list_orders` | Orders (active / archive / all), each with its `order_number`, status, state, pickup point, slot, what is owed on collection and per-item payment state; optionally within an ISO date range |
-| `order_products` | Items of one order: sku, title, price paid, variant, seller, and each item's parcel status |
-| `purchases` | Everything ever **ordered**, as product tiles; with a query, Ozon's own search over the whole history |
-| `bought_items` | What was actually received: the purchase list matched against the orders, with the coverage of the scan |
-| `list_returns` | Returns: number, date, status, amount, the products going back |
+Wildberries: wildberries_open_login, wildberries_session_status, wildberries_sync_orders, wildberries_sync_prices.
 
-**Catalog**
+Yandex Market: yandex_market_open_login, yandex_market_session_status, yandex_market_search, yandex_market_product_details, yandex_market_add_to_cart, yandex_market_set_favorite, yandex_market_list_orders, yandex_market_sync_orders.
 
-| Tool | |
-|---|---|
-| `search` | Storefront search by text and/or category slug, with sort, facet filters and a depth `limit` |
-| `get_search_filters` | Facets available for a query, and the values `search` takes |
-| `product_details` | Card: price, variants (each with its own sku), characteristics, photos; description and reviews on request |
-| `get_reviews` | Rating, review count, the breakdown per star, and reviews to any depth (`sort="worst"` for the complaints) |
-| `get_description` | Description text plus the images embedded in it |
-| `delivery_estimate` | When a product would arrive, to which address, from which warehouse |
-| `find_cheaper` | The cheapest lots of the same thing: Ozon's own other-seller offers plus a price-sorted search |
+Shared store: marketplace_orders, marketplace_order_details.
 
-**Cart**
-
-| Tool | |
-|---|---|
-| `get_cart` | The whole cart: items, quantities, ticks, group headings, and the size Ozon declares |
-| `set_cart_quantity` | Set the quantity; 0 removes |
-| `select_cart_items` | Tick what makes up the order — `only` / `add` / `remove` / `all` / `none` |
-
-**Favorites and wishlists**
-
-| Tool | |
-|---|---|
-| `list_favorites` | Favorites as product tiles |
-| `set_favorite` | Add or remove |
-| `get_lists` | Wishlists with their ids and sizes; with a sku, whether each holds it |
-| `create_list` / `delete_list` | Make a wishlist, or delete one |
-| `set_list_membership` | Put a product in a wishlist or take it out |
-| `check_favorite_price_drops` | Price changes since the previous call |
-
-**«Подборки»**
-
-| Tool | |
-|---|---|
-| `list_selections` | Selections with size, status, ids and the share link |
-| `get_selection` | One selection in full, including description and visibility |
-| `selection_products` | What it holds: sku, title, price, card link |
-| `create_selection` | Create one around a product; private by default |
-| `add_to_selection` | Add products, keeping the ones already in it |
-| `remove_from_selection` | Take products out, keeping the rest |
-| `set_selection_items` | Replace the whole list of products |
-| `edit_selection` | Rename it, replace its description |
-| `set_selection_public` | Publish to the public profile, or unpublish |
-| `delete_selection` | Delete it; the products stay |
-
-**Checkout**
-
-| Tool | |
-|---|---|
-| `get_checkout` | The order being formed: payment methods, pay-on-delivery, destinations, pickup points, shipments, points, totals |
-| `configure_checkout` | Set payment, points, pay-on-delivery and pickup point in one call |
-| `place_order` | **Spends money.** Submit, waiting until the order exists |
-| `pay_order` | Charge an order left unpaid, and report what is left to do |
-| `list_cancel_reasons` | Reasons Ozon accepts for cancelling |
-| `cancel_order` | Cancel an order, or named items of it, returning them to the cart |
-
-**Session and money**
-
-| Tool | |
-|---|---|
-| `session_status` | Whether the session acts as the account, and which gates are open |
-| `start_login` / `submit_login_code` | Restore a dead session with a one-time code |
-| `get_finances` | Ozon Card balance and total points |
-| `get_points` | Points by type, burning points, per-store seller bonuses |
-
-Changing the account is off by default. `OZON_ENABLE_WRITES=1` allows the cart,
-favorites, lists and cancellations; `OZON_ENABLE_ORDERS=1` allows `place_order`
-and is separate because it spends money. `session_status` reports both, so a
-caller can plan around them instead of finding out halfway through.
-
-## What a caller needs to know
-
-Some of Ozon's behaviour does not follow from a tool's name.
-
-**The cart ticks are the order.** `get_checkout` reports nothing orderable until
-something is ticked, and it orders exactly what is ticked — so "buy these two"
-is `select_cart_items(skus, mode="only")`, whatever else the cart holds. Ozon's
-checkout is a snapshot of those ticks taken when checkout is entered, and only an
-entry replaces it: unticking an item afterwards changes the cart and not the
-order. `get_checkout` and `place_order` therefore enter checkout before reading,
-which keeps the options already chosen.
-
-**Two money figures, never interchangeable.** `totals.total` is what Ozon charges
-today; `totals.order_total` is what the order costs. On a pay-on-delivery order
-today's charge is 0 ₽, so `order_total` is the figure to quote to a person.
-
-**An order row has no total.** Ozon prints none on the order list, so a row
-carries `amount_due_at_pickup` («К оплате при получении») and, per item, that
-item's price and `paid`. The sum owed on collection is not any item's price, and
-`paid` is `null` when Ozon says nothing — which is not unpaid.
-
-**«Текущие заказы» is not a list of current orders.** Ozon keeps the recently
-received and cancelled ones on that page. `scope="active"` leaves them out;
-`state` says which of the three a row is.
-
-**Pay-on-delivery is not all-or-nothing.** Ozon defers payment per shipment, so
-an order can be part deferred and part prepaid — an imported item usually has to
-be paid up front. `pay_after_receipt.scope` is `full`, `partial` or `none`; on a
-partial order `pay_now_items` and `pay_on_receipt_items` name the lines on each
-side, as Ozon splits them.
-
-**«Купленные товары» is a list of products, not of outcomes.** It holds
-everything ever ordered — including what was refused at the pickup point — and
-states no order, no date and no status; its price is today's catalogue price, not
-what was paid. On the account this was built against, 17 of 29 items matching one
-query had been ordered and never taken home. The outcome lives in the orders: an
-order is delivered in parcels with separate fates, so `order_products` reports
-`shipment_status` and `received` per item, and `bought_items` matches the
-list against the orders to fill them in, and its answer states how far it looked:
-each order costs a request, so a bounded scan is partial and says so —
-`unresolved` is "never seen in the orders scanned", `provisional` is "seen only
-as cancelled, an older order may have been received".
-
-**An order's dates are status dates.** The archive prints only «Получен 11
-августа» / «Отменён 12 февраля 2021», so a date range filters on when an order
-was received or cancelled — an order placed on 30 June and received on 2 July
-lands in July. The archive is a newest-first cursor, so a window is walked down
-to: the cost is the depth, not the width. A recent fortnight comes back in half a
-second; a month two years back takes tens of seconds.
-
-**A rating is a number Ozon states.** `product_details` carries `rating`,
-`reviews_count` and `questions_count`; `get_reviews` adds the per-star breakdown
-and walks pages to the depth asked for, reporting `count` (the product's total)
-beside `fetched` (what came back) — they are different numbers. Ozon offers no
-filter by star, so the one-star reviews are reached with `sort="worst"` and
-depth. A card's reviews cover its variants, so each review names the size or
-colour it is about, and «Достоинства» / «Недостатки» stay apart from the comment.
-
-**Three prices, and only one of them is charged.** A card states `price` («С
-банками» — what the account pays), `price_regular` («С другими банками») and
-`price_old` (struck through). Comparing lots on anything but the first calls a
-lot cheaper than it is, so `search(sort="cheap")` and `find_cheaper` rank on it.
-
-**Ozon's text search is literal.** A lot whose own title omits the brand is not
-returned for a query that includes it — and when nothing matches exactly Ozon
-fills the page with "you might also like", which is dropped rather than passed
-off as results. So search the model, not brand-plus-model, and confirm what a lot
-is with `product_details`: a tile's title is the seller's wording and may name no
-model at all. `limit` is depth — pages are walked until it is met, because the
-cheapest lot is regularly not on the first one.
-
-**Wishlists and «Подборки» are different things.** A wishlist has a numeric id
-and holds anything. A selection has a uuid, a cover, a description and a
-visibility; its products come from favorites only, and publishing puts it on the
-account owner's public profile after review. Its products are a separate read —
-the list states a count — and Ozon has no "add" of its own: the form submits the
-whole list, which is what `add_to_selection` / `remove_from_selection` do around
-the current contents.
-
-**Cancelling works line by line.** `cancel_order(order, skus=[...])` drops those
-items and leaves the rest of the order standing, in as many passes as it has
-items.
-
-**A card charge finishes on Ozon's bank domain**, which signs the account in to
-the bank. `pay_order` drives the payment to that point and reports what remains:
-the amount, how much to top the card up by, and the page to finish at.
-Pay-on-delivery avoids the whole thing.
-
-**Errors carry a code as well as a sentence** — `[rate_limited]`,
-`[session_expired]`, `[writes_disabled]`, `[orders_disabled]`,
-`[total_mismatch]`, `[upstream_unavailable]`. Branch on the code; the sentence is
-written to be relayed to a person. A failure never arrives as an empty result: a
-502 or a timeout raises, because "no orders" and "Ozon did not answer" are
-different answers.
+See [Ozon details](docs/ozon.md), [Wildberries details](docs/wildberries.md), [Yandex Market details](docs/yandex-market.md), and [environment settings](env.example). The Yandex order sync stores order-level items under yandex-order:{order_number}; it does not expose parcel splits, payment method, recipient, or delivery address.
 
 ## Configuration
 
-| Variable | Default | |
-|---|---|---|
-| `OZON_PROFILE_DIR` | `/data/profile` | Persistent Chromium profile holding the session |
-| `OZON_PROFILE_BACKUP` | `/data/profile.backup` | Copy of a known-good profile, restored on a sign-out |
-| `OZON_STATE_PATH` | `/data/state.json` | Legacy cookie snapshot, imported once to seed a new profile |
-| `OZON_IMPERSONATE` | `chrome124` | curl_cffi TLS-impersonation profile |
-| `OZON_ENABLE_WRITES` | `0` | Allow cart / favorites / list / cancellation changes |
-| `OZON_ENABLE_ORDERS` | `0` | Allow `place_order` — spends money |
-| `OZON_MONITOR_STORE` | `/data/price_history.json` | Favorites price-history file |
-| `OZON_REQUEST_TIMEOUT` | `30` | Seconds for one HTTP call |
-| `OZON_REQUEST_ATTEMPTS` | `3` | Attempts before a call is reported as failed |
-| `OZON_RETRY_BACKOFF_SECONDS` | `1` | Base wait between attempts, doubled and jittered |
-| `OZON_RETRY_CAP_SECONDS` | `20` | Longest wait, including a `Retry-After` Ozon asks for |
-| `OZON_BROWSER_TIMEOUT` | `60` | Seconds for a browser navigation or a login step |
-| `OZON_IDLE_SECONDS` | `600` | Close the idle browser; the HTTP session stays |
-| `OZON_TRANSPORT` | `stdio` | `stdio` (client spawns the process), `http` (streamable HTTP at `/mcp`) or `sse` (deprecated, `/sse`) |
-| `OZON_HOST` / `OZON_PORT` | `0.0.0.0` / `8084` | Bind for the HTTP transports; the same port serves `/metrics` |
-| `OZON_ALLOWED_HOSTS` | `[]` | `Host` headers `sse` accepts; empty means any. Naming hosts turns on MCP's exact-match check |
-
-See `env.example`.
-
-## Running
-
-```bash
-docker build -t marketplace-mcp .
-
-# stdio: the client attaches to the container's stdin/stdout
-docker run -i --rm --shm-size=1g -v /opt/marketplace-mcp:/data marketplace-mcp
-
-# http: long-lived service on :8084 (/mcp + /metrics)
-docker run -d --name marketplace-mcp --shm-size=1g -v /opt/marketplace-mcp:/data \
-  -e OZON_TRANSPORT=http -p 8084:8084 marketplace-mcp
-```
-
-`/data` has to be a bind mount. It holds the profile, and Ozon rotates the
-session constantly: cookies rotated over HTTP are pushed back into the profile so
-the refresh chain survives a restart. On an ephemeral directory the login is lost
-on every container recreation.
-
-> **The profile is a credential.** It grants full access to the account —
-> orders, addresses, card balance, checkout. Never commit it; back it up
-> encrypted.
-
-Locally, with [uv](https://docs.astral.sh/uv/):
-
-```bash
-uv sync
-uv run playwright install --with-deps chromium
-uv run python -m marketplace_mcp   # needs a display or Xvfb
-```
-
-Under `http` and `sse` the same port serves Prometheus metrics at `/metrics`: upstream
-request outcomes and latency, antibot re-challenges, session bootstraps, browser
-state.
-
-## Session lifetime
-
-A signed-out session looks exactly like an empty account — no orders, no
-balances, no explanation — so every tool raises instead of answering,
-`session_status` reports the state, and `start_login` / `submit_login_code`
-restore it with a one-time code that only the account owner receives.
-
-A profile known to be signed in is copied, and a sign-out is recovered from
-that copy automatically, so in most cases nobody is asked for a code.
-
-## Several agents at once
-
-Multiple clients can connect over the HTTP transports, and each gets its own MCP session. They
-share one Ozon account and one worker thread, which has two consequences.
-
-Calls are serialised: a second agent waits out the first, including a
-13-second browser bootstrap.
-
-More importantly, **the account state is shared**. Cart ticks live on Ozon's
-side, not in the MCP session, so two agents composing orders at once overwrite
-each other's selection — and `place_order` buys whatever is ticked at that
-moment, at a total the caller read a second earlier. Reads are safe for any
-number of agents; writes are not. Keep one writer per account.
-
-The endpoint has no authentication: whoever reaches the port has the account.
-
-## Limitations
-
-- Only saved addresses can be chosen. `configure_checkout` switches between the
-  points in the account's address book; adding one from the map is not
-  implemented.
-- A selection's cover cannot be uploaded; that is a multipart upload and is not
-  covered.
-- Per-shipment destinations are handled but unverified against a live order Ozon
-  actually split across addresses.
-- `pay_order` cannot complete a card charge: that happens on Ozon's bank domain
-  and needs banking credentials this server does not hold.
-- Placing an order spends real money, and is gated separately from every other
-  write.
+Common settings use the MARKETPLACE_ prefix: MARKETPLACE_STORE_PATH, MARKETPLACE_TRANSPORT, MARKETPLACE_HOST, MARKETPLACE_PORT, MARKETPLACE_ALLOWED_HOSTS, and MARKETPLACE_IDLE_SECONDS. Ozon-specific settings retain OZON_; Wildberries and Yandex Market settings use their own prefixes. See env.example for defaults and descriptions. Older OZON_ aliases for common settings still work with a deprecation warning.
 
 ## Development
 
-```bash
-make check-all   # ruff format --check, ruff check, ty, pytest with a coverage gate
-```
-
-`ty` runs with `all = "error"`, ruff with `select = ["ALL"]` and a curated ignore
-list. Tests mirror `src/`; the service layer is driven through a stand-in for
-`get_session()` and the transport through a stand-in for the HTTP session, so
-nothing in the suite touches the network.
-
-## Disclaimer
-
-The Ozon adapter reads a personal account through internal endpoints and may
-conflict with Ozon's Terms of Service. This project is intended for personal,
-low-volume use; check the applicable marketplace terms before using another
-adapter.
-
-## License
-
-[MIT](LICENSE)
-
-## Yandex Market
-
-Yandex Market provides buyer order reads and synchronization to the shared store,
-storefront search and product details,
-plus gated cart and favorite changes. Sign in through `yandex_market_open_login()`;
-the adapter keeps a separate persistent browser profile and does not require copied
-session values. Cart and favorite writes are off by default; set
-`YANDEX_MARKET_ENABLE_WRITES=1` to enable them. See
-[configuration and limitations](docs/yandex-market.md).
-
-## Wildberries
-
-Sign in through `wildberries_open_login()`, synchronize with
-`wildberries_sync_orders()`, then read the shared copy with
-`marketplace_orders(marketplace="wildberries")` and
-`marketplace_order_details(marketplace="wildberries", order_number=...)`.
-See [configuration and data limitations](docs/wildberries.md).
+Run make check-all to format and lint the code, check types, and run tests. uv is pinned to the same version in Dockerfile and CI; update both together when upgrading uv.
