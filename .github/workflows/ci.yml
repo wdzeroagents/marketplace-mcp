@@ -19,3 +19,5 @@ jobs:
       - run: uv run ruff check --no-fix src tests
       - run: uv run ty check
       - run: uv run pytest
+      - name: Build Docker image
+        run: docker build --tag marketplace-mcp:test .
