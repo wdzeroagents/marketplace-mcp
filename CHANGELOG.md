@@ -4,6 +4,36 @@ Notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+## [2.0.0] - 2026-10-19
+
+### Changed
+
+- Renamed the Python package and command to `marketplace_mcp` and
+  `marketplace-mcp` (`python -m marketplace_mcp` or `marketplace-mcp`). Shared
+  server and store settings now use `MARKETPLACE_*`; legacy `OZON_*` aliases
+  remain accepted with a deprecation warning.
+
+### Added
+
+- Added buyer adapters for Wildberries (login, order sync, and price history)
+  and Yandex Market (login, catalog search and details, gated cart/favorites,
+  order listing and sync).
+- Added a shared order store with `marketplace_orders` and
+  `marketplace_order_details` for normalized order and parcel reads.
+
+### Fixed
+
+- Shared browser driver lets all three adapters open independent profiles in the
+  same worker thread; idle browser contexts close lazily and reopen on demand.
+- Yandex Market orders now retain their original Russian status and order-level
+  items. Items use the key `yandex-order:{order_number}` because a stable parcel
+  identifier is not exposed; address, recipient, payment method, and parcel
+  splits are not available from the observed buyer detail page.
+- Corrected MCP tool descriptions, settings ownership, error codes, and
+  migration of version-1 store data.
+
 ## [1.5.0] - 2026-09-02
 
 ### Fixed
