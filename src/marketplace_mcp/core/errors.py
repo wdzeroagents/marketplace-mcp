@@ -13,6 +13,9 @@ from enum import StrEnum
 class ErrorCode(StrEnum):
     """What went wrong, in a form worth branching on."""
 
+    MARKETPLACE = "marketplace_error"
+    """Something a marketplace refused that has no more specific code."""
+
     OZON = "ozon_error"
     """Something Ozon refused that has no more specific code."""
 
@@ -43,7 +46,7 @@ class MarketplaceError(RuntimeError):
     text loses nothing worth keeping.
     """
 
-    code: ErrorCode = ErrorCode.OZON
+    code: ErrorCode = ErrorCode.MARKETPLACE
 
     def __init__(self, message: str) -> None:
         super().__init__(f"[{self.code}] {message}")
