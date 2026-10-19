@@ -1,0 +1,203 @@
+# Ozon buyer adapter
+
+This guide covers Ozon-specific behavior and tools. Shared runtime, installation, and configuration are described in the repository README.
+
+## How it works
+
+The Variti antibot blocks non-browser clients, but a browser only has to pass
+the challenge once. A real Chromium starts, passes it, and hands over its
+cookies and the exact client-hint header set; from then on every read and write
+is a direct HTTP call through [`curl_cffi`](https://github.com/lexiforest/curl_cffi)
+with Chrome's TLS fingerprint. No tool renders a page, which is why a call takes
+about 0.2 s instead of 15. The browser stays only to own the profile, refresh
+the session, and serve as the fallback for one reading — the delivery estimate.
+
+The session lives in a **persistent Chromium profile**, not a cookie snapshot.
+OzonID, the auth realm guarding checkout, keeps its state outside cookies and
+localStorage, so a Playwright `storage_state` snapshot silently loses it and
+checkout falls back to a login prompt. A profile directory keeps everything, so
+one login stays valid and the server runs unattended.
+
+Playwright's sync API cannot run inside a live event loop, and its objects
+belong to the thread that created them, so tool calls are dispatched to a single
+worker thread. They are therefore serialised, and a slow one — a bootstrap, a
+login — makes the others wait.
+
+## Tools
+
+**Orders and returns**
+
+| Tool | |
+|---|---|
+| `list_orders` | Orders (active / archive / all), each with its `order_number`, status, state, pickup point, slot, what is owed on collection and per-item payment state; optionally within an ISO date range |
+| `order_products` | Items of one order: sku, title, price paid, variant, seller, and each item's parcel status |
+| `purchases` | Everything ever **ordered**, as product tiles; with a query, Ozon's own search over the whole history |
+| `bought_items` | What was actually received: the purchase list matched against the orders, with the coverage of the scan |
+| `list_returns` | Returns: number, date, status, amount, the products going back |
+
+**Catalog**
+
+| Tool | |
+|---|---|
+| `search` | Storefront search by text and/or category slug, with sort, facet filters and a depth `limit` |
+| `get_search_filters` | Facets available for a query, and the values `search` takes |
+| `product_details` | Card: price, variants (each with its own sku), characteristics, photos; description and reviews on request |
+| `get_reviews` | Rating, review count, the breakdown per star, and reviews to any depth (`sort="worst"` for the complaints) |
+| `get_description` | Description text plus the images embedded in it |
+| `delivery_estimate` | When a product would arrive, to which address, from which warehouse |
+| `find_cheaper` | The cheapest lots of the same thing: Ozon's own other-seller offers plus a price-sorted search |
+
+**Cart**
+
+| Tool | |
+|---|---|
+| `get_cart` | The whole cart: items, quantities, ticks, group headings, and the size Ozon declares |
+| `set_cart_quantity` | Set the quantity; 0 removes |
+| `select_cart_items` | Tick what makes up the order — `only` / `add` / `remove` / `all` / `none` |
+
+**Favorites and wishlists**
+
+| Tool | |
+|---|---|
+| `list_favorites` | Favorites as product tiles |
+| `set_favorite` | Add or remove |
+| `get_lists` | Wishlists with their ids and sizes; with a sku, whether each holds it |
+| `create_list` / `delete_list` | Make a wishlist, or delete one |
+| `set_list_membership` | Put a product in a wishlist or take it out |
+| `check_favorite_price_drops` | Price changes since the previous call |
+
+**«Подборки»**
+
+| Tool | |
+|---|---|
+| `list_selections` | Selections with size, status, ids and the share link |
+| `get_selection` | One selection in full, including description and visibility |
+| `selection_products` | What it holds: sku, title, price, card link |
+| `create_selection` | Create one around a product; private by default |
+| `add_to_selection` | Add products, keeping the ones already in it |
+| `remove_from_selection` | Take products out, keeping the rest |
+| `set_selection_items` | Replace the whole list of products |
+| `edit_selection` | Rename it, replace its description |
+| `set_selection_public` | Publish to the public profile, or unpublish |
+| `delete_selection` | Delete it; the products stay |
+
+**Checkout**
+
+| Tool | |
+|---|---|
+| `get_checkout` | The order being formed: payment methods, pay-on-delivery, destinations, pickup points, shipments, points, totals |
+| `configure_checkout` | Set payment, points, pay-on-delivery and pickup point in one call |
+| `place_order` | **Spends money.** Submit, waiting until the order exists |
+| `pay_order` | Charge an order left unpaid, and report what is left to do |
+| `list_cancel_reasons` | Reasons Ozon accepts for cancelling |
+| `cancel_order` | Cancel an order, or named items of it, returning them to the cart |
+
+**Session and money**
+
+| Tool | |
+|---|---|
+| `session_status` | Whether the session acts as the account, and which gates are open |
+| `start_login` / `submit_login_code` | Restore a dead session with a one-time code |
+| `get_finances` | Ozon Card balance and total points |
+| `get_points` | Points by type, burning points, per-store seller bonuses |
+
+Changing the account is off by default. `OZON_ENABLE_WRITES=1` allows the cart,
+favorites, lists and cancellations; `OZON_ENABLE_ORDERS=1` allows `place_order`
+and is separate because it spends money. `session_status` reports both, so a
+caller can plan around them instead of finding out halfway through.
+
+## What a caller needs to know
+
+Some of Ozon's behaviour does not follow from a tool's name.
+
+**The cart ticks are the order.** `get_checkout` reports nothing orderable until
+something is ticked, and it orders exactly what is ticked — so "buy these two"
+is `select_cart_items(skus, mode="only")`, whatever else the cart holds. Ozon's
+checkout is a snapshot of those ticks taken when checkout is entered, and only an
+entry replaces it: unticking an item afterwards changes the cart and not the
+order. `get_checkout` and `place_order` therefore enter checkout before reading,
+which keeps the options already chosen.
+
+**Two money figures, never interchangeable.** `totals.total` is what Ozon charges
+today; `totals.order_total` is what the order costs. On a pay-on-delivery order
+today's charge is 0 ₽, so `order_total` is the figure to quote to a person.
+
+**An order row has no total.** Ozon prints none on the order list, so a row
+carries `amount_due_at_pickup` («К оплате при получении») and, per item, that
+item's price and `paid`. The sum owed on collection is not any item's price, and
+`paid` is `null` when Ozon says nothing — which is not unpaid.
+
+**«Текущие заказы» is not a list of current orders.** Ozon keeps the recently
+received and cancelled ones on that page. `scope="active"` leaves them out;
+`state` says which of the three a row is.
+
+**Pay-on-delivery is not all-or-nothing.** Ozon defers payment per shipment, so
+an order can be part deferred and part prepaid — an imported item usually has to
+be paid up front. `pay_after_receipt.scope` is `full`, `partial` or `none`; on a
+partial order `pay_now_items` and `pay_on_receipt_items` name the lines on each
+side, as Ozon splits them.
+
+**«Купленные товары» is a list of products, not of outcomes.** It holds
+everything ever ordered — including what was refused at the pickup point — and
+states no order, no date and no status; its price is today's catalogue price, not
+what was paid. On the account this was built against, 17 of 29 items matching one
+query had been ordered and never taken home. The outcome lives in the orders: an
+order is delivered in parcels with separate fates, so `order_products` reports
+`shipment_status` and `received` per item, and `bought_items` matches the
+list against the orders to fill them in, and its answer states how far it looked:
+each order costs a request, so a bounded scan is partial and says so —
+`unresolved` is "never seen in the orders scanned", `provisional` is "seen only
+as cancelled, an older order may have been received".
+
+**An order's dates are status dates.** The archive prints only «Получен 11
+августа» / «Отменён 12 февраля 2021», so a date range filters on when an order
+was received or cancelled — an order placed on 30 June and received on 2 July
+lands in July. The archive is a newest-first cursor, so a window is walked down
+to: the cost is the depth, not the width. A recent fortnight comes back in half a
+second; a month two years back takes tens of seconds.
+
+**A rating is a number Ozon states.** `product_details` carries `rating`,
+`reviews_count` and `questions_count`; `get_reviews` adds the per-star breakdown
+and walks pages to the depth asked for, reporting `count` (the product's total)
+beside `fetched` (what came back) — they are different numbers. Ozon offers no
+filter by star, so the one-star reviews are reached with `sort="worst"` and
+depth. A card's reviews cover its variants, so each review names the size or
+colour it is about, and «Достоинства» / «Недостатки» stay apart from the comment.
+
+**Three prices, and only one of them is charged.** A card states `price` («С
+банками» — what the account pays), `price_regular` («С другими банками») and
+`price_old` (struck through). Comparing lots on anything but the first calls a
+lot cheaper than it is, so `search(sort="cheap")` and `find_cheaper` rank on it.
+
+**Ozon's text search is literal.** A lot whose own title omits the brand is not
+returned for a query that includes it — and when nothing matches exactly Ozon
+fills the page with "you might also like", which is dropped rather than passed
+off as results. So search the model, not brand-plus-model, and confirm what a lot
+is with `product_details`: a tile's title is the seller's wording and may name no
+model at all. `limit` is depth — pages are walked until it is met, because the
+cheapest lot is regularly not on the first one.
+
+**Wishlists and «Подборки» are different things.** A wishlist has a numeric id
+and holds anything. A selection has a uuid, a cover, a description and a
+visibility; its products come from favorites only, and publishing puts it on the
+account owner's public profile after review. Its products are a separate read —
+the list states a count — and Ozon has no "add" of its own: the form submits the
+whole list, which is what `add_to_selection` / `remove_from_selection` do around
+the current contents.
+
+**Cancelling works line by line.** `cancel_order(order, skus=[...])` drops those
+items and leaves the rest of the order standing, in as many passes as it has
+items.
+
+**A card charge finishes on Ozon's bank domain**, which signs the account in to
+the bank. `pay_order` drives the payment to that point and reports what remains:
+the amount, how much to top the card up by, and the page to finish at.
+Pay-on-delivery avoids the whole thing.
+
+**Errors carry a code as well as a sentence** — `[rate_limited]`,
+`[session_expired]`, `[writes_disabled]`, `[orders_disabled]`,
+`[total_mismatch]`, `[upstream_unavailable]`. Branch on the code; the sentence is
+written to be relayed to a person. A failure never arrives as an empty result: a
+502 or a timeout raises, because "no orders" and "Ozon did not answer" are
+different answers.
+
