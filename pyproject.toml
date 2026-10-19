@@ -113,6 +113,7 @@ ignore = [
 # boolean parameter cannot be made keyword-only.
 "src/marketplace_mcp/adapters/ozon/tools/*.py" = ["boolean-type-hint-positional-argument", "boolean-default-value-positional-argument"]
 "src/marketplace_mcp/adapters/yandex_market/tools_favorites.py" = ["boolean-default-value-positional-argument"]
+"src/marketplace_mcp/adapters/yandex_market/tools.py" = ["boolean-default-value-positional-argument"]
 "src/marketplace_mcp/adapters/wildberries/tools.py" = ["boolean-default-value-positional-argument"]
 # Same reason: the checkout service mirrors the tool signature.
 "src/marketplace_mcp/adapters/ozon/services/checkout.py" = ["boolean-type-hint-positional-argument"]
