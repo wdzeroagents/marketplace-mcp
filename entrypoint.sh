@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start a virtual display (OZON antibot needs headed Chromium), then the server.
+# Start the virtual display required by headed Chromium, then the server.
 set -euo pipefail
 
 # A container that is stopped and started again — rather than recreated — keeps
