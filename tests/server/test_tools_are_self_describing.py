@@ -51,6 +51,8 @@ def test_the_server_explains_itself() -> None:
     # failure is not an empty answer.
     assert "[rate_limited]" in instructions
     assert "different answers" in instructions
+    assert "yandex_market_sync_orders()" in instructions
+    assert "becomes available after" not in instructions
 
 
 async def test_every_tool_and_argument_describes_itself() -> None:
