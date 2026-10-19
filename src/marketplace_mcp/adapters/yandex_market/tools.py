@@ -16,9 +16,9 @@ from marketplace_mcp.adapters.yandex_market.source import YandexMarketSource
 from marketplace_mcp.core.dependencies import run_blocking
 from marketplace_mcp.core.store import connect
 from marketplace_mcp.core.store.sync import sync_orders as _sync_orders
-from marketplace_mcp.settings import get_settings
 from marketplace_mcp.core.utils.annotations import Limit
 from marketplace_mcp.mcp_server import mcp
+from marketplace_mcp.settings import get_settings
 
 _REGISTERED_TOOL_MODULES = (_cart_tools, _catalog_tools, _favorites_tools)
 
