@@ -5,6 +5,7 @@ from http import HTTPStatus
 from typing import Any, Final
 
 from marketplace_mcp.adapters.ozon.dependencies import get_session
+from marketplace_mcp.adapters.ozon.errors import OzonError as MarketplaceError
 from marketplace_mcp.adapters.ozon.models.checkout import CancelReason, OrderCancelled, PaymentRequested
 from marketplace_mcp.adapters.ozon.models.enums import OrderState
 from marketplace_mcp.adapters.ozon.models.orders import Order, OrderDetail, Return
@@ -16,7 +17,7 @@ from marketplace_mcp.adapters.ozon.parsing.orders import (
     parse_orders,
 )
 from marketplace_mcp.adapters.ozon.parsing.returns import parse_returns
-from marketplace_mcp.core.errors import MarketplaceError, WritesDisabledError
+from marketplace_mcp.core.errors import WritesDisabledError
 from marketplace_mcp.core.utils.money import format_money, to_kopecks
 from marketplace_mcp.core.utils.serde import dumps, loads
 from marketplace_mcp.settings import get_settings
