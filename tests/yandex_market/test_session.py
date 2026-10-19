@@ -154,7 +154,7 @@ def test_status_uses_resolver_to_verify_authentication() -> None:
     assert "open_login" in (status.detail or "")
 
 
-def test_close_stops_context_and_playwright() -> None:
+def test_close_stops_context_without_stopping_shared_playwright() -> None:
     client, _ = configured()
     context = Mock()
     playwright = Mock()
@@ -162,7 +162,7 @@ def test_close_stops_context_and_playwright() -> None:
     client._playwright = playwright
     client.close()
     context.close.assert_called_once_with()
-    playwright.stop.assert_called_once_with()
+    playwright.stop.assert_not_called()
     assert client._page is None
 
 
