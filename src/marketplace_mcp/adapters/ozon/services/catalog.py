@@ -14,6 +14,7 @@ from marketplace_mcp.adapters.ozon.constants import (
     WEB_DELIVERY_STATE_ID,
 )
 from marketplace_mcp.adapters.ozon.dependencies import get_session
+from marketplace_mcp.adapters.ozon.errors import OzonError as MarketplaceError
 from marketplace_mcp.adapters.ozon.models.catalog import (
     BoughtItems,
     Cheaper,
@@ -29,7 +30,6 @@ from marketplace_mcp.adapters.ozon.models.orders import OrderProduct
 from marketplace_mcp.adapters.ozon.parsing import catalog as parse
 from marketplace_mcp.adapters.ozon.parsing.common import declared_counter, next_pages
 from marketplace_mcp.adapters.ozon.parsing.orders import ORDER_NUMBER_RE, order_numbers_from_link, parse_order_products
-from marketplace_mcp.core.errors import MarketplaceError
 from marketplace_mcp.core.utils.serde import dumps
 
 _MAX_TILE_PAGES: Final = 200
