@@ -18,7 +18,8 @@ def get_executor() -> ThreadPoolExecutor:
     refuses to run inside a live asyncio loop (which is where the MCP server
     dispatches tools), and its objects may only be touched from the thread that
     created them — so a pool of interchangeable workers would break browser
-    reuse. One worker also serialises access, matching a session's own lock.
+    reuse. The shared Playwright driver also lives on this thread. One worker
+    serialises access, matching a session's own lock.
     """
     return ThreadPoolExecutor(max_workers=1, thread_name_prefix="marketplace-session")
 
