@@ -31,9 +31,7 @@ def test_search_adds_currency_and_preserves_displayed_review_count(monkeypatch: 
 
 def test_product_details_resolves_numeric_id_and_normalizes_json_ld(monkeypatch: pytest.MonkeyPatch) -> None:
     session = Mock()
-    session.search_page.return_value = [
-        {"product_id": "123456", "url": "https://market.yandex.ru/card/chay/123456"}
-    ]
+    session.search_page.return_value = [{"product_id": "123456", "url": "https://market.yandex.ru/card/chay/123456"}]
     session.product_page.return_value = {
         "product_id": "123456",
         "title": "Чай",
