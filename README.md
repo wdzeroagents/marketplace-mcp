@@ -15,7 +15,7 @@ MCP server for buyer accounts on Ozon, Wildberries, and Yandex Market. Each adap
 
 All adapters use persistent Chromium profiles. Docker runs Chromium under Xvfb; allocate shared memory with --shm-size=1g and mount /data to persistent storage. Keep the volume private because profiles grant access to buyer accounts. Calls from all adapters use one worker thread and run sequentially, so a long Ozon scan or a pending login blocks calls to the other marketplaces.
 
-The Ozon adapter is documented to require a Russian IP. A Russian-IP requirement for Wildberries and Yandex Market has not been verified; network restrictions can depend on the account and location.
+The Ozon adapter is documented to require a Russian IP. No separate Russian-IP requirement is currently known for Wildberries or Yandex Market. Yandex Market sign-in succeeded from the network used for testing; this confirms access only from that network, not from every location.
 
 ## Quick start
 
