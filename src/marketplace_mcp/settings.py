@@ -1,16 +1,67 @@
-"""Runtime configuration (pydantic-settings). Everything tunable is here;
-fixed values live in ``constants``.
-"""
+"""Runtime configuration for the shared server and Ozon account adapter."""
 
+import logging
+import os
 from functools import cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
+
+class ServerSettings(BaseSettings):
+    """Settings shared by the server and every marketplace adapter."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    transport: Literal["stdio", "http", "sse"] = Field(
+        default="stdio", validation_alias=AliasChoices("MARKETPLACE_TRANSPORT", "OZON_TRANSPORT")
+    )
+    host: str = Field(default="0.0.0.0", validation_alias=AliasChoices("MARKETPLACE_HOST", "OZON_HOST"))
+    port: int = Field(default=8084, validation_alias=AliasChoices("MARKETPLACE_PORT", "OZON_PORT"))
+    allowed_hosts: list[str] = Field(
+        default_factory=list, validation_alias=AliasChoices("MARKETPLACE_ALLOWED_HOSTS", "OZON_ALLOWED_HOSTS")
+    )
+    store_path: Path = Field(
+        default=Path("/data/store.db"),
+        validation_alias=AliasChoices("MARKETPLACE_STORE_PATH", "OZON_STORE_PATH"),
+    )
+    idle_seconds: int = Field(
+        default=600,
+        ge=0,
+        validation_alias=AliasChoices(
+            "MARKETPLACE_IDLE_SECONDS",
+            "OZON_IDLE_SECONDS",
+            "WILDBERRIES_IDLE_SECONDS",
+            "YANDEX_MARKET_IDLE_SECONDS",
+        ),
+    )
+
+
+@cache
+def get_server_settings() -> ServerSettings:
+    """Read shared settings and warn when a legacy adapter prefix is used."""
+    aliases = {
+        "OZON_TRANSPORT": "MARKETPLACE_TRANSPORT",
+        "OZON_HOST": "MARKETPLACE_HOST",
+        "OZON_PORT": "MARKETPLACE_PORT",
+        "OZON_ALLOWED_HOSTS": "MARKETPLACE_ALLOWED_HOSTS",
+        "OZON_STORE_PATH": "MARKETPLACE_STORE_PATH",
+        "OZON_IDLE_SECONDS": "MARKETPLACE_IDLE_SECONDS",
+        "WILDBERRIES_IDLE_SECONDS": "MARKETPLACE_IDLE_SECONDS",
+        "YANDEX_MARKET_IDLE_SECONDS": "MARKETPLACE_IDLE_SECONDS",
+    }
+    for legacy, replacement in aliases.items():
+        if legacy in os.environ and replacement not in os.environ:
+            logger.warning("%s is deprecated; use %s", legacy, replacement)
+    return ServerSettings()
 
 
 class OzonSettings(BaseSettings):
-    """Session, transport and feature flags, read from ``OZON_*`` env vars."""
+    """Ozon account settings, read from ``OZON_*`` environment variables."""
 
     model_config = SettingsConfigDict(env_prefix="OZON_", extra="ignore")
 
@@ -21,7 +72,9 @@ class OzonSettings(BaseSettings):
     profile_backup: Path = Path("/data/profile.backup")
     """Copy of a known-good profile, restored if the live one gets logged out."""
 
-    state_path: Path = Path("/data/state.json")
+    state_path: Path = Field(
+        default=Path("/data/state.json"), validation_alias=AliasChoices("OZON_STATE_PATH", "OZON_STATE")
+    )
     """Legacy storageState, imported once to seed a brand-new profile."""
 
     impersonate: str = "chrome124"
@@ -32,9 +85,6 @@ class OzonSettings(BaseSettings):
 
     enable_orders: bool = False
     """Allow place_order. Separate from enable_writes: this one spends money."""
-
-    store_path: Path = Path("/data/store.db")
-    """The local copy of the account: purchases, orders, parcels, price history."""
 
     monitor_store: Path = Path("/data/price_history.json")
     """Where favorites price-monitoring snapshots are persisted."""
@@ -49,44 +99,13 @@ class OzonSettings(BaseSettings):
     """Base wait between attempts; doubled per attempt and jittered."""
 
     retry_cap_seconds: float = 20.0
-    """Longest this server waits before a retry, including a Retry-After Ozon
-    asked for — an hour-long Retry-After must not hang a tool call."""
+    """Longest server wait before a retry, including a Retry-After request."""
 
     browser_timeout: float = 60.0
     """Seconds to wait for a browser navigation or a login step."""
 
-    idle_seconds: int = 600
-    """Close the idle browser after this long; HTTP session stays alive."""
-
-    transport: Literal["stdio", "http", "sse"] = "stdio"
-    """How clients reach the server.
-
-    ``stdio`` for a client that spawns the process. ``http`` serves streamable
-    HTTP at /mcp, which is what MCP clients use now. ``sse`` serves the older
-    event-stream transport at /sse; it still works and the spec has deprecated
-    it, so prefer ``http`` for anything new."""
-
-    # Binds inside the container; what is actually reachable is set by the port mapping.
-    host: str = "0.0.0.0"
-    """Bind address used by the http and sse transports."""
-
-    port: int = 8084
-    """Port serving both the MCP endpoint (/mcp or /sse) and /metrics."""
-
-    allowed_hosts: list[str] = []
-    """``Host`` headers the HTTP transports accept, empty meaning any.
-
-    MCP can refuse a request whose Host it does not recognise — protection
-    against DNS rebinding — and the check is an exact match, so a server reached
-    at anything other than a listed name answers 421 "Invalid Host header".
-    Left empty the check stays off, which is the useful default here: the
-    transport has no authentication of its own, so the boundary is who can reach
-    the port, and a server told to bind 0.0.0.0 is meant to be reached from
-    elsewhere. List the names in use ("mcp.example:*" matches any port) when the
-    port is exposed more widely.
-    """
-
 
 @cache
 def get_settings() -> OzonSettings:
+    """Return account settings for Ozon adapter code."""
     return OzonSettings()
