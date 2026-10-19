@@ -1,15 +1,14 @@
-# OZON's antibot blocks headless Chromium, so the session bootstrap runs a real
-# Chromium under Xvfb; thereafter requests go out over curl_cffi. Xvfb is started
-# by entrypoint.sh before the server.
+# Browser-backed marketplace sessions use headed Chromium under Xvfb in Docker.
+# Xvfb is started by entrypoint.sh before the server.
 FROM python:3.13-slim
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# Keep in sync with astral-sh/setup-uv in .github/workflows/ci.yml.
+COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /uvx /bin/
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     PLAYWRIGHT_BROWSERS_PATH=/ms-browsers \
-    DEBIAN_FRONTEND=noninteractive \
-    OZON_STATE=/data/state.json
+    DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 # README.md comes along because pyproject declares it as the package readme —
@@ -25,12 +24,11 @@ COPY src ./src
 COPY entrypoint.sh ./entrypoint.sh
 RUN uv sync --frozen --no-dev && chmod +x entrypoint.sh
 
-# /data holds the authenticated session (state.json) and the price history, so it
-# must be bind-mounted to survive container recreation — the session rotates and
-# is written back on every call.
+# /data holds the marketplace browser profiles, shared order store, and Ozon price history;
+# mount it as a persistent volume so sessions and synchronized data survive.
 VOLUME ["/data"]
 
-# Only listened on when OZON_TRANSPORT=sse; serves both /sse and /metrics.
+# Used by the shared HTTP transport; also serves /metrics.
 EXPOSE 8084
 
 ENTRYPOINT ["./entrypoint.sh"]
