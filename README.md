@@ -9,7 +9,7 @@ marketplaces. Their capabilities are separate:
 |---|---|
 | Ozon | MCP tools for the signed-in buyer account: orders, purchases, returns, cart, favorites, lists, catalog, checkout and finances. Some tools can change the account when explicitly enabled. |
 | Wildberries | Buyer sign-in, order and purchase sync, plus shared tools to read normalized orders and parcel details from the local store. |
-| Yandex Market | Buyer order groups, storefront search and product details, plus gated cart and favorite changes. |
+| Yandex Market | Buyer orders synced to the shared store, storefront search and product details, plus gated cart and favorite changes. |
 
 The detailed setup and tool reference below describe the Ozon adapter. Each
 marketplace has its own session and request behavior; see the [Yandex Market
@@ -346,7 +346,8 @@ adapter.
 
 ## Yandex Market
 
-Yandex Market provides buyer order reads, storefront search and product details,
+Yandex Market provides buyer order reads and synchronization to the shared store,
+storefront search and product details,
 plus gated cart and favorite changes. Sign in through `yandex_market_open_login()`;
 the adapter keeps a separate persistent browser profile and does not require copied
 session values. Cart and favorite writes are off by default; set
