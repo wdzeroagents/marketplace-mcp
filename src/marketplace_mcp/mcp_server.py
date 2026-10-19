@@ -35,19 +35,6 @@ Failures carry a leading code such as [upstream_unavailable], [rate_limited], [s
 [writes_disabled], [orders_disabled], or [total_mismatch]. Branch on the code and relay the message:
 an error is not an empty account. Recover a signed-out session in that marketplace's login flow.
 
-Wildberries
-Call wildberries_open_login(), sign in in its browser, and verify with wildberries_session_status().
-Call wildberries_sync_orders() before reading the shared store. wildberries_sync_prices() records
-historical purchase prices, not current catalog prices. Token and cookies stay out of MCP arguments.
-
-Yandex Market
-Call yandex_market_open_login(), finish sign-in or any challenge, then verify with
-yandex_market_session_status(). Search public products with yandex_market_search() and
-yandex_market_product_details(). yandex_market_list_orders() reads without saving; use
-yandex_market_sync_orders() to update the shared store. completed does not mean received; use the
-original status text. Cart and favorite changes are disabled unless
-YANDEX_MARKET_ENABLE_WRITES=1. Cookies and request headers stay in its browser profile.
-
 Ozon
 All Ozon tools act on the signed-in buyer account; money is real. Start with session_status(): it
 reports the session, writes_enabled, and orders_enabled gates. The operator controls both gates.
@@ -94,7 +81,20 @@ Ozon failures never masquerade as an empty result. Recover a signed-out session 
 start_login(login) and submit_login_code(code); ask the account owner for the one-time code. Card
 payment finishes on the bank's domain; this server holds no bank credentials. pay_order() reports
 the amount, any top-up needed, and the page to finish on; pay-on-delivery avoids bank sign-in.
-Prices, dates, and addresses use Ozon's original wording and RUB. Pass identifiers back unchanged."""
+Prices, dates, and addresses use Ozon's original wording and RUB. Pass identifiers back unchanged.Wildberries
+Call wildberries_open_login(), sign in in its browser, and verify with wildberries_session_status().
+Call wildberries_sync_orders() before reading the shared store. wildberries_sync_prices() records
+historical purchase prices, not current catalog prices. Token and cookies stay out of MCP arguments.
+
+Yandex Market
+Call yandex_market_open_login(), finish sign-in or any challenge, then verify with
+yandex_market_session_status(). Search public products with yandex_market_search() and
+yandex_market_product_details(). yandex_market_list_orders() reads without saving; use
+yandex_market_sync_orders() to update the shared store. completed does not mean received; use the
+original status text. Cart and favorite changes are disabled unless
+YANDEX_MARKET_ENABLE_WRITES=1. Cookies and request headers stay in its browser profile.
+
+"""
 
 
 def _transport_security() -> TransportSecuritySettings:
