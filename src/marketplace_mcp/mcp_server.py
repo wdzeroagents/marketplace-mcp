@@ -28,7 +28,7 @@ profile defaults to /data/wildberries-profile; token and cookies stay out of MCP
 
 The shared marketplace_orders() and marketplace_order_details() tools read normalized data from the
 local store. Sync the selected marketplace first. Use marketplace="ozon", "wildberries", or
-"yandex_market"; the last one becomes available after Yandex order sync is implemented.
+"yandex_market".
 
 Yandex Market tools use a separate persistent browser profile.
 Call yandex_market_open_login() to sign in or complete a challenge, then verify with
@@ -38,7 +38,12 @@ yandex_market_set_favorite() change the signed-in account and are disabled unles
 YANDEX_MARKET_ENABLE_WRITES=1. They verify the resulting page state. The profile defaults to
 /data/yandex-market-profile; cookies and request headers stay inside the browser. Orders are read
 with yandex_market_list_orders(scope="active"|"completed", limit=100); completed does not imply
-received. These are internal storefront calls and may change without notice.
+received, so use the original Russian status. yandex_market_sync_orders() saves orders to the shared
+store; read them with marketplace_orders(marketplace="yandex_market") and
+marketplace_order_details(marketplace="yandex_market", order_number=...). Yandex exposes order-level
+items, not shipment parcels; the store uses one synthetic parcel key,
+`yandex-order:{order_number}`. Payment method, actual parcel splits, recipient, and delivery address
+are not available to the store. These are internal storefront calls and may change without notice.
 
 Ozon tools provide read-write access to one ozon.ru buyer account: orders, purchases, returns, cart,
 favorites, collections, product cards, catalog search, checkout, Ozon Card balance and points.
