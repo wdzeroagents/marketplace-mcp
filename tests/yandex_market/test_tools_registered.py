@@ -8,6 +8,7 @@ def test_catalog_and_write_tools_are_registered_and_described() -> None:
         "yandex_market_product_details",
         "yandex_market_add_to_cart",
         "yandex_market_set_favorite",
+        "yandex_market_sync_orders",
     }
     assert expected <= tools.keys()
     for name in expected:
