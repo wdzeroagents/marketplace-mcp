@@ -6,12 +6,7 @@ Notable changes are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- Wildberries order sync now includes active purchases from the account page's
-  orders API alongside the completed-purchase archive.
-
-## [2.0.0] - 2026-10-19
+## [2.0.0] - 2026-10-20
 
 ### Changed
 
@@ -19,6 +14,14 @@ Notable changes are documented here. The format follows
   `marketplace-mcp` (`python -m marketplace_mcp` or `marketplace-mcp`). Shared
   server and store settings now use `MARKETPLACE_*`; legacy `OZON_*` aliases
   remain accepted with a deprecation warning.
+- **Migration from v1.5.0:** replace imports from `ozon_mcp` with
+  `marketplace_mcp`, and replace the `ozon-mcp` command with `marketplace-mcp`
+  or `python -m marketplace_mcp`. Rename shared settings `OZON_TRANSPORT`,
+  `OZON_HOST`, `OZON_PORT`, `OZON_ALLOWED_HOSTS`, `OZON_STORE_PATH`, and
+  `OZON_IDLE_SECONDS` to their `MARKETPLACE_*` equivalents. The old shared
+  names remain accepted with a deprecation warning; Ozon-specific settings keep
+  the `OZON_*` prefix. Wildberries and Yandex Market use their own prefixes.
+  See `env.example` for the current settings.
 
 ### Added
 
@@ -30,6 +33,8 @@ Notable changes are documented here. The format follows
 
 ### Fixed
 
+- Wildberries order sync now includes active purchases from the account page's
+  orders API alongside the completed-purchase archive.
 - Shared browser driver lets all three adapters open independent profiles in the
   same worker thread; idle browser contexts close lazily and reopen on demand.
 - Yandex Market orders now retain their original Russian status and order-level
