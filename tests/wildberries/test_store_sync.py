@@ -7,6 +7,9 @@ from marketplace_mcp.core.store.sync import sync_orders
 
 
 class FakeSession:
+    def get(self, _url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return {"data": []}
+
     def post(self, _url: str, _body: Any) -> dict[str, Any]:
         return {
             "value": {

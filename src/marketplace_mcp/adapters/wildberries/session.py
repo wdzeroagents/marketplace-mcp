@@ -1,14 +1,9 @@
-"""Talking to Wildberries: a token from the browser, then plain HTTP.
+"""Use Wildberries' signed-in browser profile for its account API.
 
-WB authorises its account APIs with a bearer token — a JWT its sign-in SDK
-leaves in the page's local storage, good for thirty days. So the browser is
-opened once to read that token out of a signed-in profile, closed again, and
-every read after it is an ordinary HTTPS request.
-
-That is the whole difference from the Ozon session, which has to keep a browser
-alive because its session lives in cookies that rotate on almost every call.
-Same problem, different enough answer that sharing one implementation would
-have meant writing a switch rather than a session.
+The buyer API uses a bearer token stored in local storage, but WB's anti-bot
+also checks the browser request context. Account reads therefore run as a
+same-origin fetch in the persistent browser instead of replaying its token and
+cookies through a standalone HTTP client.
 """
 
 import base64
@@ -16,26 +11,23 @@ import binascii
 import json
 import logging
 import os
+import re
 import threading
 import time
-from atexit import register as register_atexit
 from contextlib import suppress
+from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from typing import Any, Final, Self
+from urllib.parse import urlencode, urlsplit
 
-from curl_cffi import requests
 from playwright.sync_api import Error as PlaywrightError
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from marketplace_mcp.adapters.wildberries.constants import (
-    APP_TYPE,
-    HOME,
-    PURCHASES_PAGE,
-    TOKEN_STORAGE_KEY,
-)
+from marketplace_mcp.adapters.wildberries.constants import APP_TYPE, HOME, PURCHASES_PAGE, TOKEN_STORAGE_KEY
 from marketplace_mcp.core.browser import get_playwright
+from marketplace_mcp.core.dependencies import register_worker_cleanup
 from marketplace_mcp.core.errors import ErrorCode, MarketplaceError
 from marketplace_mcp.settings import get_server_settings
 
@@ -44,10 +36,10 @@ logger = logging.getLogger(__name__)
 # Read the token again this long before it expires rather than at the moment it
 # does: a walk that starts valid should not end unauthorised halfway.
 _REFRESH_MARGIN_SECONDS: Final = 3600
-# 401 is WB refusing the token; 498 is its antibot refusing the cookies. Both
-# mean the session read out of the profile is no longer good enough, and both
-# are answered the same way — read it again.
-_STALE_SESSION: Final = frozenset({401, 498})
+# A 401 means the browser token is no longer accepted. A 498 is an anti-bot
+# block, which should not be misreported as an expired login.
+_STALE_SESSION: Final = frozenset({401})
+_ANTIBOT_BLOCKED: Final = 498
 
 
 class WildberriesSignedOutError(MarketplaceError):
@@ -84,13 +76,24 @@ class WildberriesSessionStatus(BaseModel):
     detail: str | None = None
 
 
+@dataclass(frozen=True)
+class _BrowserResponse:
+    status_code: int
+    body: str
+
+    def json(self) -> Any:
+        try:
+            return json.loads(self.body)
+        except json.JSONDecodeError:
+            raise WildberriesUpstreamError("Wildberries returned a non-JSON response.") from None
+
+
 class WildberriesSession:
-    """A bearer token kept fresh from a browser profile, and HTTP that uses it."""
+    """Track token expiry and make account requests in a persistent browser."""
 
     def __init__(
         self,
         profile_dir: Path | None = None,
-        impersonate: str = "chrome124",
         timeout: float = 30.0,
         settings: WildberriesSettings | None = None,
     ) -> None:
@@ -98,12 +101,9 @@ class WildberriesSession:
             **({"profile_dir": profile_dir} if profile_dir is not None else {})
         )
         self._profile = self.settings.profile_dir
-        self._impersonate = impersonate
         self._timeout = timeout
         self._lock = threading.RLock()
-        self._http: Any = None
         self._token: str | None = None
-        self._cookies: dict[str, str] = {}
         self._expires_at: float = 0.0
         self._playwright: Any = None
         self._context: Any = None
@@ -190,19 +190,8 @@ class WildberriesSession:
 
     # -- the token -----------------------------------------------------------
 
-    def _read_from_browser(self) -> tuple[str, dict[str, str]]:
-        """Open the signed-in profile just long enough to read the session out.
-
-        Both halves are needed, and they are not the same thing. The bearer
-        token authorises the caller; the cookies satisfy the antibot in front of
-        www.wildberries.ru, which answers 498 without them however good the
-        token is. astro.wildberries.ru takes the token alone, which is what made
-        the difference easy to miss.
-
-        A login window opened explicitly remains alive until a token appears;
-        otherwise a temporary visible browser reads the existing profile and
-        closes as soon as the token and cookies have been captured.
-        """
+    def _read_from_browser(self) -> str:
+        """Read the current bearer token from the signed-in profile."""
         opened_here = self._context is None
         token: str | None = None
         try:
@@ -221,19 +210,14 @@ class WildberriesSession:
                 self._page.wait_for_timeout(6_000)
             token_value: Any = self._page.evaluate(f"() => localStorage.getItem({TOKEN_STORAGE_KEY!r})")
             token = str(token_value) if token_value else None
-            cookies: dict[str, str] = {
-                str(cookie["name"]): str(cookie["value"])
-                for cookie in self._context.cookies()
-                if "wildberries" in cookie.get("domain", "") or "wb.ru" in cookie.get("domain", "")
-            }
             if not token:
                 raise WildberriesSignedOutError(
                     "the profile holds no access token — sign in through wildberries_open_login"
                 )
-            return str(token), cookies
+            return str(token)
         finally:
             # Keep an explicitly opened login window alive until credentials
-            # exist. A temporary browser is always closed to persist its state.
+            # exist. A temporary browser is always closed after reading the token.
             if token or opened_here:
                 self._close_browser()
 
@@ -258,7 +242,7 @@ class WildberriesSession:
         with self._lock:
             if self._token and time.time() < self._expires_at - _REFRESH_MARGIN_SECONDS:
                 return self._token
-            self._token, self._cookies = self._read_from_browser()
+            self._token = self._read_from_browser()
             self._expires_at = self.expiry_of(self._token)
             left = (self._expires_at - time.time()) / 86400
             logger.info("read a Wildberries token, good for %.1f days", left)
@@ -268,24 +252,9 @@ class WildberriesSession:
         """Drop the token so the next call reads a fresh one."""
         with self._lock:
             self._token = None
-            self._cookies = {}
             self._expires_at = 0.0
 
-    # -- http ----------------------------------------------------------------
-
-    def _session(self) -> Any:
-        if self._http is None:
-            self._http = requests.Session(impersonate=self._impersonate)
-        return self._http
-
-    def _headers(self) -> dict[str, str]:
-        return {
-            "authorization": f"Bearer {self.token()}",
-            "wb-apptype": APP_TYPE,
-            "accept-language": "ru-RU",
-            "origin": HOME,
-            "referer": f"{HOME}/lk/myorders/archive",
-        }
+    # -- browser-backed API transport ---------------------------------------
 
     def get(self, url: str, params: dict[str, Any] | None = None) -> Any:
         return self._call("GET", url, params=params)
@@ -302,13 +271,21 @@ class WildberriesSession:
         """
         with self._lock:
             response = self._send(method, url, **kwargs)
+            if response.status_code == _ANTIBOT_BLOCKED:
+                raise WildberriesUpstreamError(
+                    "Wildberries blocked the authenticated browser request with its anti-bot protection."
+                )
             if response.status_code in _STALE_SESSION:
                 logger.info("Wildberries answered %s; reading the session again", response.status_code)
                 self.forget_token()
                 response = self._send(method, url, **kwargs)
                 if response.status_code in _STALE_SESSION:
                     raise WildberriesSignedOutError(
-                        "Wildberries rejected the saved session. Sign in again with wildberries_open_login."
+                        "Wildberries rejected the browser session. Sign in again with wildberries_open_login."
+                    )
+                if response.status_code == _ANTIBOT_BLOCKED:
+                    raise WildberriesUpstreamError(
+                        "Wildberries blocked the authenticated browser request with its anti-bot protection."
                     )
             if response.status_code >= 400:
                 raise WildberriesUpstreamError(
@@ -316,18 +293,135 @@ class WildberriesSession:
                 )
             return response.json()
 
-    def _send(self, method: str, url: str, **kwargs: Any) -> Any:
-        headers = self._headers()  # reading these is what fetches the session
-        return self._session().request(
-            method, url, headers=headers, cookies=self._cookies, timeout=self._timeout, **kwargs
+    def _send(self, method: str, url: str, **kwargs: Any) -> _BrowserResponse:
+        """Make the account request from the signed-in browser's own origin.
+
+        WB's web API returns HTTP 498 to a standalone HTTP client even when it
+        has the profile's valid bearer token and cookies. A same-origin fetch
+        keeps the browser's cookies and request fingerprint together.
+        """
+        parsed = urlsplit(url)
+        if parsed.scheme != "https" or parsed.netloc != urlsplit(HOME).netloc:
+            raise ValueError("Wildberries account requests must stay on the Wildberries origin.")
+        params = kwargs.get("params")
+        if params:
+            query = urlencode(params, doseq=True)
+            url = f"{url}{'&' if parsed.query else '?'}{query}"
+        body = kwargs.get("json")
+        body_text = json.dumps(body, ensure_ascii=False, separators=(",", ":")) if body is not None else None
+
+        with self._lock:
+            try:
+                self._ensure_browser()
+                response = (
+                    self._capture_orders_page(url)
+                    if parsed.path == "/api/v2/orders"
+                    else self._send_from_page(
+                        method,
+                        url,
+                        body_text,
+                    )
+                )
+            except PlaywrightError as exc:
+                self._close_browser()
+                detail = str(exc).splitlines()[0][:240]
+                detail = re.sub(r"(?i)Bearer\s+\S+", "Bearer <redacted>", detail)
+                detail = re.sub(r"https?://\S+", "<url>", detail)
+                logger.warning("Wildberries browser request failed with %s: %s", type(exc).__name__, detail)
+                raise WildberriesUpstreamError(
+                    f"Could not complete the request in the Wildberries browser ({type(exc).__name__})."
+                ) from None
+            else:
+                self._browser_last_used = time.monotonic()
+                return response
+
+    def _send_from_page(self, method: str, url: str, body: str | None) -> _BrowserResponse:
+        """Run an account request with the profile's browser credentials."""
+        if "/lk/mypurchases" not in (self._page.url or ""):
+            self._page.goto(
+                PURCHASES_PAGE,
+                wait_until="domcontentloaded",
+                timeout=self.settings.browser_timeout * 1000,
+            )
+        result = self._page.evaluate(
+            r"""async ({url, method, body, tokenKey, appType, timeoutMs}) => {
+              const token = localStorage.getItem(tokenKey);
+              if (!token) return {status: 401, body: ""};
+              const headers = {
+                authorization: `Bearer ${token}`,
+                "accept-language": "ru-RU"
+              };
+              if (new URL(url).pathname !== "/api/v2/orders") headers["wb-apptype"] = appType;
+              const deviceId = localStorage.getItem("wbx__sessionID");
+              if (deviceId) headers.deviceid = deviceId;
+              const wbauid = document.cookie
+                .split(";")
+                .map(part => part.trim())
+                .find(part => part.startsWith("_wbauid="))
+                ?.slice("_wbauid=".length);
+              if (wbauid) headers.wbauid = decodeURIComponent(wbauid);
+              if (body !== null) headers["content-type"] = "application/json";
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), timeoutMs);
+              try {
+                const response = await fetch(url, {
+                  method, headers, body: body === null ? undefined : body,
+                  credentials: "include", signal: controller.signal
+                });
+                return {status: response.status, body: await response.text()};
+              } finally {
+                clearTimeout(timer);
+              }
+            }""",
+            {
+                "url": url,
+                "method": method.upper(),
+                "body": body,
+                "tokenKey": TOKEN_STORAGE_KEY,
+                "appType": APP_TYPE,
+                "timeoutMs": round(self._timeout * 1000),
+            },
         )
+        return _BrowserResponse(status_code=int(result["status"]), body=str(result.get("body") or ""))
+
+    def _capture_orders_page(self, url: str) -> _BrowserResponse:
+        """Capture the account page's own first-page orders XHR.
+
+        WB returns HTML when this endpoint is replayed from the same page
+        context. Listening to the request made during page load preserves the
+        browser's exact request behavior.
+        """
+        page = self._page
+        path = urlsplit(url).path
+        pattern = f"**{path}*"
+
+        def continue_request(route: Any) -> None:
+            route.continue_()
+
+        def is_target(response: Any) -> bool:
+            return urlsplit(str(response.url)).path == path
+
+        try:
+            page.route(pattern, continue_request)
+            with page.expect_response(is_target, timeout=self.settings.browser_timeout * 1000) as captured:
+                page.goto(
+                    PURCHASES_PAGE,
+                    wait_until="domcontentloaded",
+                    timeout=self.settings.browser_timeout * 1000,
+                )
+            response = captured.value
+            return _BrowserResponse(status_code=response.status, body=response.text())
+        except PlaywrightError:
+            raise WildberriesUpstreamError(
+                "Could not read the orders list from the Wildberries account page."
+            ) from None
+        finally:
+            with suppress(PlaywrightError):
+                page.unroute(pattern, continue_request)
 
     def close(self) -> None:
         with self._lock:
             self._close_browser()
-            if self._http is not None:
-                self._http.close()
-                self._http = None
 
     def __enter__(self) -> Self:
         return self
@@ -340,5 +434,5 @@ class WildberriesSession:
 def get_session() -> WildberriesSession:
     """One adapter session for this process and its persistent profile."""
     session = WildberriesSession()
-    register_atexit(session.close)
+    register_worker_cleanup(session.close)
     return session

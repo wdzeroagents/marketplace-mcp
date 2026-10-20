@@ -5,10 +5,12 @@ from unittest.mock import Mock
 
 import pytest
 
+from marketplace_mcp.adapters.wildberries.constants import ARCHIVE, PURCHASES_PAGE, TOKEN_STORAGE_KEY
 from marketplace_mcp.adapters.wildberries.session import (
     WildberriesSession,
     WildberriesSettings,
     WildberriesSignedOutError,
+    WildberriesUpstreamError,
 )
 from marketplace_mcp.core.errors import ErrorCode
 
@@ -89,7 +91,7 @@ def test_status_does_not_launch_an_empty_profile(tmp_path: Path) -> None:
     assert client._page is None
 
 
-def test_token_and_cookies_are_kept_in_memory_then_browser_closes(
+def test_token_is_kept_in_memory_then_temporary_browser_closes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -97,9 +99,44 @@ def test_token_and_cookies_are_kept_in_memory_then_browser_closes(
     monkeypatch.setattr(client, "expiry_of", lambda _token: 10**12)
 
     assert client.token() == "opaque.token.value"
-    assert client._cookies == {"session": "private-cookie"}
     assert context.closed is True
     assert client._page is None
+
+
+def test_account_request_runs_inside_browser_with_implicit_cookies(tmp_path: Path) -> None:
+    client, page, _ = configured(tmp_path, "private-token")
+    page.evaluate = Mock(return_value={"status": 200, "body": '{"value":{"archive":[]}}'})
+
+    response = client._send("POST", ARCHIVE, json={})
+
+    assert response.status_code == 200
+    assert response.json() == {"value": {"archive": []}}
+    script, payload = page.evaluate.call_args.args
+    assert "localStorage.getItem(tokenKey)" in script
+    assert 'localStorage.getItem("wbx__sessionID")' in script
+    assert 'part.startsWith("_wbauid=")' in script
+    assert 'credentials: "include"' in script
+    assert payload["tokenKey"] == TOKEN_STORAGE_KEY
+    assert "private-token" not in str(payload)
+    assert page.visited == [PURCHASES_PAGE]
+
+
+def test_account_request_rejects_non_wildberries_origin(tmp_path: Path) -> None:
+    client = WildberriesSession(settings=WildberriesSettings(profile_dir=tmp_path / "wb-profile"))
+
+    with pytest.raises(ValueError, match="Wildberries origin"):
+        client._send("GET", "https://attacker.example/orders")
+
+
+def test_antibot_block_is_not_misreported_as_expired_login(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    client = WildberriesSession(settings=WildberriesSettings(profile_dir=tmp_path / "wb-profile"))
+    send = Mock(return_value=SimpleNamespace(status_code=498))
+    monkeypatch.setattr(client, "_send", send)
+
+    with pytest.raises(WildberriesUpstreamError, match="anti-bot"):
+        client._call("POST", ARCHIVE, json={})
+
+    assert send.call_count == 1
 
 
 def test_rejected_session_has_safe_reauthentication_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

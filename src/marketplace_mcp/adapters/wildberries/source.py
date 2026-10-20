@@ -1,9 +1,8 @@
 """Wildberries, in the terms the core keeps.
 
-One endpoint carries almost everything. WB's order archive answers with a row
-per item — the product, its size and colour, what was paid for it, when it was
-ordered, what became of it, and which pickup point it went to — so the three
-reads the core asks for are three views of one fetch rather than three walks.
+WB separates its active orders from the purchase archive. The former carries
+current order and item state; the latter carries completed purchases, the
+product, size and colour, price, status, and pickup point.
 
 That is the shape of the site, not a shortcut: WB has no notion of a parcel in
 this API, so a parcel here is what one order sent to one place amounts to.
@@ -11,9 +10,12 @@ this API, so a parcel here is what one order sent to one place amounts to.
 
 import logging
 from collections.abc import Iterable
+from datetime import UTC, datetime
 from typing import Any, Final
 
 from marketplace_mcp.adapters.wildberries.constants import (
+    ACTIVE_ORDERS,
+    ACTIVE_ORDERS_PAGE_SIZE,
     ARCHIVE,
     HOME,
     RETURNED,
@@ -77,6 +79,9 @@ class WildberriesSource:
         self._images = images if images is not None else ImageFinder()
         self._offices = offices if offices is not None else PickupPoints()
         self._archive: list[dict[str, Any]] | None = None
+        self._active_orders: list[dict[str, Any]] = []
+        self._active_orders_complete = False
+        self._active_orders_by_number: dict[str, dict[str, Any]] = {}
 
     # -- the one fetch -------------------------------------------------------
 
@@ -93,6 +98,27 @@ class WildberriesSource:
             self._archive = sorted(lines, key=lambda line: str(line.get("orderDate") or ""), reverse=True)
             logger.info("Wildberries archive holds %d lines", len(self._archive))
         return self._archive
+
+    def active_orders(self, limit: int) -> list[dict[str, Any]]:
+        """Read the first active-order page used by the signed-in account page."""
+        if not self._active_orders_complete:
+            answer = self._session.get(
+                ACTIVE_ORDERS,
+                params={
+                    "limit": ACTIVE_ORDERS_PAGE_SIZE,
+                    "exclude_delivery_types": "777,778",
+                    "exclude_b2b": "true",
+                    "offset": 0,
+                },
+            )
+            rows = (answer or {}).get("data") or []
+            rows = [row for row in rows if isinstance(row, dict) and row.get("id")]
+            self._active_orders.extend(rows)
+            self._active_orders_by_number.update({str(row["id"]): row for row in rows})
+            if len(rows) == ACTIVE_ORDERS_PAGE_SIZE:
+                logger.warning("Wildberries active orders reached the account page's %d-row limit", len(rows))
+            self._active_orders_complete = True
+        return self._active_orders[:limit]
 
     # -- MarketplaceSource ---------------------------------------------------
 
@@ -132,13 +158,31 @@ class WildberriesSource:
             it reaches one it already holds.
 
         """
+        # Keep active rows first: sync_orders stops at its first already-settled
+        # row, so a moving order must never sit behind an old archive entry.
+        active_rows = self.active_orders(limit)
+        active_numbers = {str(row["id"]) for row in active_rows}
+        for row in sorted(active_rows, key=_active_order_sort_key, reverse=True):
+            state_code = row.get("state")
+            status = "Активный заказ" if state_code is None else f"Активный заказ (состояние WB: {state_code})"
+            yield OrderRecord(
+                number=str(row["id"]),
+                state=OrderState.ACTIVE,
+                status=status,
+                status_date=_date_from_timestamp(row.get("order_dt")),
+            )
+
+        remaining = max(0, limit - len(active_rows))
+        if remaining == 0:
+            return
+
         seen: dict[str, list[dict[str, Any]]] = {}
         for line in self.archive():
             number = str(line.get("orderId") or "")
-            if number:
+            if number and number not in active_numbers:
                 seen.setdefault(number, []).append(line)
 
-        for number, lines in list(seen.items())[:limit]:
+        for number, lines in list(seen.items())[:remaining]:
             states = {STATES.get(str(line.get("status")), OrderState.ACTIVE) for line in lines}
             state = OrderState.ACTIVE if OrderState.ACTIVE in states else next(iter(states))
             last = max((str(line.get("lastDate") or "") for line in lines), default="")
@@ -156,6 +200,10 @@ class WildberriesSource:
         one is taken to be an order's lines that went to the same place — which
         is what a parcel is, and the only grouping the data supports.
         """
+        active_order = self._active_orders_by_number.get(order_number)
+        if active_order is not None:
+            return self._active_order_parcels(order_number, active_order)
+
         lines = [line for line in self.archive() if str(line.get("orderId") or "") == order_number]
         by_office: dict[int, list[dict[str, Any]]] = {}
         for line in lines:
@@ -189,6 +237,69 @@ class WildberriesSource:
                 )
             )
         return parcels
+
+    def _active_order_parcels(self, order_number: str, order: dict[str, Any]) -> list[ParcelRecord]:
+        """Turn an active API order into the shared parcel and item records."""
+        by_office: dict[int, list[dict[str, Any]]] = {}
+        for line in order.get("rids") or []:
+            if not isinstance(line, dict):
+                continue
+            try:
+                office_id = int(line.get("dst_office_id") or order.get("dst_office_id") or 0)
+            except (TypeError, ValueError):
+                office_id = 0
+            by_office.setdefault(office_id, []).append(line)
+
+        status = (
+            f"Активный заказ (состояние WB: {order['state']})" if order.get("state") is not None else "Активный заказ"
+        )
+        parcels: list[ParcelRecord] = []
+        for office_id, group in by_office.items():
+            total = sum(int(line.get("product_cost") or line.get("price") or 0) for line in group)
+            parcels.append(
+                ParcelRecord(
+                    order_number=order_number,
+                    shipment_id=f"{order_number}:{office_id}",
+                    status=status,
+                    delivery_kind=self._offices.kind(office_id),
+                    delivery_address=str(order.get("full_address") or self._offices.address(office_id) or "") or None,
+                    recipient=None,
+                    paid_total=_money(total) if total else None,
+                    payment_method=str(order.get("pay_type")) if order.get("pay_type") is not None else None,
+                    items=[
+                        ParcelItemRecord(
+                            sku=str(line.get("nm_id") or ""),
+                            title=_title(line),
+                            variant=_variant(line),
+                            seller=str(line["seller_id"]) if line.get("seller_id") else None,
+                            price=_money(line.get("product_cost") or line.get("price")),
+                            received=None,
+                        )
+                        for line in group
+                        if line.get("nm_id")
+                    ],
+                ),
+            )
+        return parcels
+
+
+def _date_from_timestamp(value: Any) -> str | None:
+    """Convert WB's Unix order timestamp to a store date."""
+    try:
+        timestamp = int(value)
+        if timestamp > 10**12:
+            timestamp //= 1000
+        return datetime.fromtimestamp(timestamp, tz=UTC).date().isoformat()
+    except (OSError, OverflowError, TypeError, ValueError):
+        return None
+
+
+def _active_order_sort_key(order: dict[str, Any]) -> int:
+    """Sort an active API page by its original order time."""
+    try:
+        return int(order.get("order_dt") or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _received(status: str) -> bool | None:

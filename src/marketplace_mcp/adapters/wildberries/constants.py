@@ -12,6 +12,10 @@ PURCHASES_PAGE: Final = f"{HOME}/lk/mypurchases"
 # word — this one states «Purchased» / «Refund» outright and prices in both
 # roubles and kopecks.
 ARCHIVE: Final = f"{HOME}/webapi/lk/myorders/archive/get"
+# The account page gets orders that are still in progress from this endpoint;
+# the archive above contains completed purchases only.
+ACTIVE_ORDERS: Final = f"{HOME}/api/v2/orders"
+ACTIVE_ORDERS_PAGE_SIZE: Final = 100
 ACTIVE_DELIVERIES: Final = f"{HOME}/webapi/v2/lk/myorders/delivery/active"
 
 # Where the sign-in SDK leaves the access token. Reading it out of the browser
