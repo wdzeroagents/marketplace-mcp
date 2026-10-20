@@ -1,3 +1,5 @@
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock
 
 import pytest
@@ -5,7 +7,7 @@ import pytest
 from marketplace_mcp.adapters.ozon.session.transport import OzonSession
 from marketplace_mcp.adapters.wildberries.session import WildberriesSession
 from marketplace_mcp.adapters.yandex_market.session import YandexMarketSession
-from marketplace_mcp.core import browser
+from marketplace_mcp.core import browser, dependencies
 
 
 def test_get_playwright_starts_one_driver(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -19,6 +21,21 @@ def test_get_playwright_starts_one_driver(monkeypatch: pytest.MonkeyPatch) -> No
         start.assert_called_once_with()
     finally:
         browser.get_playwright.cache_clear()
+
+
+def test_worker_cleanup_runs_on_session_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    callbacks = []
+    worker_names: list[str] = []
+    monkeypatch.setattr(dependencies.threading, "_register_atexit", callbacks.append)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        monkeypatch.setattr(dependencies, "get_executor", lambda: executor)
+        dependencies.register_worker_cleanup(lambda: worker_names.append(threading.current_thread().name))
+
+        assert len(callbacks) == 1
+        callbacks[0]()
+
+    assert len(worker_names) == 1
+    assert worker_names[0] != threading.current_thread().name
 
 
 @pytest.mark.parametrize(

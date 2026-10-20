@@ -18,15 +18,23 @@ from marketplace_mcp.core.source import MarketplaceSource
 
 
 class FakeSession:
-    """Answers with one scripted archive, and counts how often it is asked."""
+    """Answers with scripted account APIs and counts how often they are asked."""
 
-    def __init__(self, lines: list[dict[str, Any]]) -> None:
+    def __init__(self, lines: list[dict[str, Any]], active_orders: list[dict[str, Any]] | None = None) -> None:
         self.lines = lines
-        self.calls = 0
+        self.active_orders = active_orders or []
+        self.archive_calls = 0
+        self.order_queries: list[dict[str, Any]] = []
 
     def post(self, _url: str, _body: Any = None) -> dict[str, Any]:
-        self.calls += 1
+        self.archive_calls += 1
         return {"value": {"archive": self.lines}}
+
+    def get(self, _url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        self.order_queries.append(params or {})
+        offset = int((params or {}).get("offset", 0))
+        limit = int((params or {}).get("limit", len(self.active_orders)))
+        return {"data": self.active_orders[offset : offset + limit]}
 
 
 class NoImages:
@@ -65,6 +73,28 @@ def line(**fields: Any) -> dict[str, Any]:
 
 def source(lines: list[dict[str, Any]]) -> WildberriesSource:
     return WildberriesSource(FakeSession(lines), images=NoImages(), offices=KnownOffices())
+
+
+def active_order(number: str = "active-1", *, order_dt: int = 1_791_790_746) -> dict[str, Any]:
+    return {
+        "id": number,
+        "state": 4,
+        "order_dt": order_dt,
+        "dst_office_id": 211648,
+        "pay_type": 1,
+        "rids": [
+            {
+                "state": 1,
+                "nm_id": 123456,
+                "brand": "Brand",
+                "name": "Jacket",
+                "size": "M",
+                "color": "blue",
+                "seller_id": 7,
+                "product_cost": 123456,
+            },
+        ],
+    }
 
 
 def test_it_is_a_marketplace_source() -> None:
@@ -130,13 +160,54 @@ def test_the_total_is_the_parcel_not_the_order() -> None:
 
 
 def test_the_archive_is_fetched_once_however_often_it_is_read() -> None:
-    """All three reads come out of one answer; a sync calls them in a row."""
+    """Each account endpoint is fetched once and reused for the sync."""
     session = FakeSession([line()])
     wb = WildberriesSource(session, images=NoImages(), offices=KnownOffices())
     wb.purchases(10)
     list(wb.orders(10))
     wb.parcels("order-1")
-    assert session.calls == 1
+    assert session.archive_calls == 1
+    assert len(session.order_queries) == 1
+
+
+def test_active_api_orders_are_listed_before_archived_purchases() -> None:
+    session = FakeSession([line()], [active_order()])
+    wb = WildberriesSource(session, images=NoImages(), offices=KnownOffices())
+
+    orders = list(wb.orders(10))
+
+    assert [order.number for order in orders] == ["active-1", "order-1"]
+    assert orders[0].state is OrderState.ACTIVE
+    assert orders[0].status == "Активный заказ (состояние WB: 4)"
+    assert orders[0].status_date == "2026-10-12"
+
+
+def test_active_api_order_details_include_items_without_claiming_received() -> None:
+    wb = WildberriesSource(FakeSession([], [active_order()]), images=NoImages(), offices=KnownOffices())
+    list(wb.orders(10))  # loads the active records used by the detail lookup
+
+    parcel = wb.parcels("active-1")[0]
+
+    assert parcel.status == "Активный заказ (состояние WB: 4)"
+    assert parcel.delivery_kind == "Доставка в пункт выдачи"
+    assert parcel.items[0].sku == "123456"
+    assert parcel.items[0].title == "Brand Jacket"
+    assert parcel.items[0].variant == "M・blue"
+    assert parcel.items[0].price == "1 234,56 ₽"
+    assert parcel.items[0].received is None
+
+
+def test_active_api_uses_the_site_page_size_and_filters() -> None:
+    rows = [active_order(f"active-{index}", order_dt=1_794_000_000 - index) for index in range(101)]
+    session = FakeSession([], rows)
+    wb = WildberriesSource(session, images=NoImages(), offices=KnownOffices())
+
+    orders = list(wb.orders(101))
+
+    assert len(orders) == 100
+    assert session.order_queries == [
+        {"limit": 100, "exclude_delivery_types": "777,778", "exclude_b2b": "true", "offset": 0},
+    ]
 
 
 def test_one_product_bought_twice_is_one_product() -> None:

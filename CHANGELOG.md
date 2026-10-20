@@ -6,6 +6,11 @@ Notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Wildberries order sync now includes active purchases from the account page's
+  orders API alongside the completed-purchase archive.
+
 ## [2.0.0] - 2026-10-19
 
 ### Changed

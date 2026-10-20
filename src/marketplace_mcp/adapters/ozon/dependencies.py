@@ -1,10 +1,10 @@
 """The Ozon session, made once per process."""
 
-import atexit
 import contextlib
 from functools import cache
 
 from marketplace_mcp.adapters.ozon.session.transport import OzonSession
+from marketplace_mcp.core.dependencies import register_worker_cleanup
 
 
 @cache
@@ -23,5 +23,5 @@ def get_session() -> OzonSession:
         with contextlib.suppress(Exception):
             session.close()
 
-    atexit.register(flush)
+    register_worker_cleanup(flush)
     return session

@@ -1,9 +1,10 @@
 """One Playwright driver shared by browser-backed adapters."""
 
-import atexit
 from functools import cache
 
 from playwright.sync_api import Playwright, sync_playwright
+
+from marketplace_mcp.core.dependencies import register_worker_cleanup
 
 
 @cache
@@ -24,6 +25,5 @@ def _stop_playwright() -> None:
 
 
 # Register during import, before adapters register their context cleanup.
-# Atexit runs later registrations first, so adapter contexts close before the
-# shared driver stops.
-atexit.register(_stop_playwright)
+# Reverse-order worker cleanup closes adapter contexts before stopping the driver.
+register_worker_cleanup(_stop_playwright)

@@ -1,6 +1,5 @@
 """Authenticated Yandex Market session backed by a persistent browser profile."""
 
-import atexit
 import json
 import os
 import threading
@@ -16,6 +15,7 @@ from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from marketplace_mcp.core.browser import get_playwright
+from marketplace_mcp.core.dependencies import register_worker_cleanup
 from marketplace_mcp.core.errors import ErrorCode, MarketplaceError
 from marketplace_mcp.settings import get_server_settings
 
@@ -469,5 +469,5 @@ class YandexMarketSession:
 @cache
 def get_session() -> YandexMarketSession:
     session = YandexMarketSession()
-    atexit.register(session.close)
+    register_worker_cleanup(session.close)
     return session
