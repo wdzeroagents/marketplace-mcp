@@ -282,4 +282,3 @@ First stable release. 39 tools over one ozon.ru buyer account.
   rather than returned as empty results.
 - Errors carry a machine-readable code beside a sentence written to be relayed.
 - Prometheus metrics at `/metrics`; `stdio` and `sse` transports.
-
