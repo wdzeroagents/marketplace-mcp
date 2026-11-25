@@ -11,6 +11,21 @@ MCP server for buyer accounts on Ozon, Wildberries, and Yandex Market. Each adap
 | Yandex Market | Login, product search and details, order listing and synchronization, gated cart and favorites |
 | Shared store | Normalized order lists and order details across adapters |
 
+Call `marketplace_capabilities()` to inspect the common operation vocabulary
+before selecting an adapter tool. It reports each operation as `available`,
+`gated`, or `unavailable`, with the exact tool names and required setting.
+
+| Common operation | Ozon | Wildberries | Yandex Market |
+|---|---|---|---|
+| Product search and details | Available | Unavailable | Available |
+| Read cart and favorites | Available | Unavailable | Unavailable |
+| Change cart and favorites | Gated | Unavailable | Gated |
+| Live orders | Available | Synced to store | Available |
+| Sync and read normalized orders | Available | Available | Available |
+| Sync purchase-price history | Available | Available | Unavailable |
+
+The manifest is authoritative when this table and an adapter release differ.
+
 ## Requirements
 
 All adapters use persistent Chromium profiles. Docker runs Chromium under Xvfb; allocate shared memory with --shm-size=1g and mount /data to persistent storage. Keep the volume private because profiles grant access to buyer accounts. Calls from all adapters use one worker thread and run sequentially, so a long Ozon scan or a pending login blocks calls to the other marketplaces.
@@ -50,7 +65,9 @@ Wildberries: wildberries_open_login, wildberries_session_status, wildberries_syn
 
 Yandex Market: yandex_market_open_login, yandex_market_session_status, yandex_market_search, yandex_market_product_details, yandex_market_add_to_cart, yandex_market_set_favorite, yandex_market_list_orders, yandex_market_sync_orders.
 
-Shared store: marketplace_orders, marketplace_order_details.
+Shared contract: marketplace_capabilities. Shared store: marketplace_orders, marketplace_order_details.
+An adapter must report an unsupported feature as `unavailable`, never as an
+empty account.
 
 See [Ozon details](docs/ozon.md), [Wildberries details](docs/wildberries.md), [Yandex Market details](docs/yandex-market.md), and [environment settings](env.example). The Yandex order sync stores order-level items under yandex-order:{order_number}; it does not expose parcel splits, payment method, recipient, or delivery address.
 
@@ -61,3 +78,4 @@ Common settings use the MARKETPLACE_ prefix: MARKETPLACE_STORE_PATH, MARKETPLACE
 ## Development
 
 Run make check-all to format and lint the code, check types, and run tests. uv is pinned to the same version in Dockerfile and CI; update both together when upgrading uv.
+
