@@ -24,6 +24,7 @@ ENUM_ARGUMENTS = (
     ("marketplace_orders", "marketplace"),
     ("marketplace_orders", "scope"),
     ("marketplace_order_details", "marketplace"),
+    ("marketplace_capabilities", "marketplace"),
 )
 GATED_TOOLS = (
     "set_cart_quantity",
@@ -41,6 +42,10 @@ def _properties(tool: Tool) -> dict[str, Any]:
     return (tool.inputSchema or {}).get("properties") or {}
 
 
+def _has_enum(spec: dict[str, Any]) -> bool:
+    return bool(spec.get("enum")) or any(bool(part.get("enum")) for part in spec.get("anyOf", []))
+
+
 def test_the_server_explains_itself() -> None:
     # Clients surface this on connect; it is where the flows are stated.
     instructions = mcp.instructions or ""
@@ -52,6 +57,7 @@ def test_the_server_explains_itself() -> None:
     assert "[rate_limited]" in instructions
     assert "Wildberries syncs buyer orders and prices" in instructions
     assert "yandex_market_sync_orders()" in instructions
+    assert "marketplace_capabilities()" in instructions
     assert "yandex_market_sync_orders()" in instructions
     assert "becomes available after" not in instructions
 
@@ -72,7 +78,7 @@ async def test_closed_value_sets_are_enums_in_the_schema() -> None:
     by_name = {tool.name: tool for tool in await mcp.list_tools()}
     for tool_name, argument in ENUM_ARGUMENTS:
         spec = _properties(by_name[tool_name])[argument]
-        assert spec.get("enum"), f"{tool_name}.{argument} should enumerate its values"
+        assert _has_enum(spec), f"{tool_name}.{argument} should enumerate its values"
 
 
 async def test_gated_tools_say_so_before_they_are_called() -> None:
@@ -86,3 +92,4 @@ async def test_money_tools_name_the_figure_to_quote() -> None:
     by_name = {tool.name: tool.description or "" for tool in await mcp.list_tools()}
     assert "order_total" in by_name["get_checkout"]
     assert "order_total" in by_name["place_order"]
+
