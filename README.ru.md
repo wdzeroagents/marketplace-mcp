@@ -78,4 +78,3 @@ Wildberries: wildberries_open_login, wildberries_session_status, wildberries_syn
 ## Разработка
 
 make check-all форматирует и проверяет код, запускает проверку типов и тесты. Версия uv закреплена одинаково в Dockerfile и CI; обновляйте её в обоих местах одновременно.
-
