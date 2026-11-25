@@ -37,6 +37,9 @@ class ErrorCode(StrEnum):
     TOTAL_MISMATCH = "total_mismatch"
     """The confirmed total is no longer what Ozon charges. Nothing was ordered."""
 
+    CAPABILITY_UNAVAILABLE = "capability_unavailable"
+    """The requested operation has no safe implementation for this adapter."""
+
 
 class MarketplaceError(RuntimeError):
     """Base class for every error this server raises, whichever marketplace.
@@ -50,6 +53,18 @@ class MarketplaceError(RuntimeError):
 
     def __init__(self, message: str) -> None:
         super().__init__(f"[{self.code}] {message}")
+
+
+class CapabilityUnavailableError(MarketplaceError):
+    """Raised by a future shared operation that an adapter cannot perform."""
+
+    code = ErrorCode.CAPABILITY_UNAVAILABLE
+
+    def __init__(self, marketplace: str, capability: str) -> None:
+        super().__init__(
+            f"{marketplace} does not implement {capability}. Call marketplace_capabilities() to find "
+            "the supported tools instead of treating this as an empty result."
+        )
 
 
 class UpstreamError(MarketplaceError):
@@ -159,3 +174,4 @@ class SessionExpiredError(MarketplaceError):
             "Check session_status() to confirm. Until then no account data can be read"
             f"{detail}"
         )
+
