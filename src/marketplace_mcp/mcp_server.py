@@ -118,4 +118,3 @@ def _transport_security() -> TransportSecuritySettings:
 
 
 mcp: Final = FastMCP("marketplace", instructions=INSTRUCTIONS, transport_security=_transport_security())
-
