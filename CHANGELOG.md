@@ -6,6 +6,10 @@ Notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `marketplace_capabilities()` exposes the stable cross-marketplace capability
+  contract and exact adapter-specific tool names.
+
 ## [2.0.0] - 2026-10-20
 
 ### Changed

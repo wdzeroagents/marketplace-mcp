@@ -22,6 +22,7 @@ from marketplace_mcp.adapters.ozon.tools import (
 )
 from marketplace_mcp.adapters.wildberries import tools as wildberries
 from marketplace_mcp.adapters.yandex_market import tools as yandex_market
+from marketplace_mcp.core import capability_tools
 from marketplace_mcp.core.store import tools as shared_store
 from marketplace_mcp.mcp_server import mcp as _server
 
@@ -40,6 +41,7 @@ TOOL_MODULES: Final = (
     yandex_market,
     wildberries,
     shared_store,
+    capability_tools,
 )
 
 

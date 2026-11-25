@@ -2,6 +2,7 @@
 
 from marketplace_mcp.adapters.ozon.errors import OzonError
 from marketplace_mcp.core.errors import (
+    CapabilityUnavailableError,
     ErrorCode,
     MarketplaceError,
     OrdersDisabledError,
@@ -22,6 +23,7 @@ def test_every_error_names_itself() -> None:
     assert OrdersDisabledError().code is ErrorCode.ORDERS_DISABLED
     assert TotalMismatchError("1 ₽", "2 ₽").code is ErrorCode.TOTAL_MISMATCH
     assert SessionExpiredError().code is ErrorCode.SESSION_EXPIRED
+    assert CapabilityUnavailableError("wildberries", "product_search").code is ErrorCode.CAPABILITY_UNAVAILABLE
 
 
 def test_the_code_travels_with_the_message() -> None:
