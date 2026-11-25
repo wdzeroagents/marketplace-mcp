@@ -184,4 +184,3 @@ def capabilities_for(marketplace: MarketplaceName | None = None) -> tuple[Market
     if marketplace is not None:
         return (CAPABILITIES[marketplace],)
     return tuple(CAPABILITIES[name] for name in ("ozon", "wildberries", "yandex_market"))
-
