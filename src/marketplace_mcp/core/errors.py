@@ -174,4 +174,3 @@ class SessionExpiredError(MarketplaceError):
             "Check session_status() to confirm. Until then no account data can be read"
             f"{detail}"
         )
-
