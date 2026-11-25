@@ -39,4 +39,3 @@ def test_the_message_still_says_what_to_do() -> None:
     mismatch = str(TotalMismatchError("999 ₽", "777 ₽"))
     assert "Nothing was ordered" in mismatch
     assert "777 ₽" in mismatch
-
