@@ -78,4 +78,3 @@ Common settings use the MARKETPLACE_ prefix: MARKETPLACE_STORE_PATH, MARKETPLACE
 ## Development
 
 Run make check-all to format and lint the code, check types, and run tests. uv is pinned to the same version in Dockerfile and CI; update both together when upgrading uv.
-
