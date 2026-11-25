@@ -21,6 +21,12 @@ one marketplace does not sign in to another. Ozon has account, catalog, checkout
 Wildberries syncs buyer orders and prices; Yandex Market has catalog tools, gated cart/favorites,
 and buyer orders. Browser profiles and permissions are separate.
 
+Capabilities
+Call marketplace_capabilities() before selecting an adapter-specific tool. It uses one vocabulary
+for login, catalog, cart, favorites, live orders, synchronization, stored orders, details and price
+history. Every entry is available, gated (with its setting named in detail), or unavailable; do not
+interpret an unavailable operation as an empty account or retry it.
+
 Shared store
 Sync before reading when the local copy may be empty or stale: Ozon uses sync_orders(), Wildberries
 uses wildberries_sync_orders(), and Yandex Market uses yandex_market_sync_orders(). Read normalized
@@ -112,3 +118,4 @@ def _transport_security() -> TransportSecuritySettings:
 
 
 mcp: Final = FastMCP("marketplace", instructions=INSTRUCTIONS, transport_security=_transport_security())
+
