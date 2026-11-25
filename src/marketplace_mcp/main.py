@@ -51,4 +51,3 @@ def build_server() -> FastMCP:
 
 
 mcp: Final = build_server()
-
