@@ -92,4 +92,3 @@ async def test_money_tools_name_the_figure_to_quote() -> None:
     by_name = {tool.name: tool.description or "" for tool in await mcp.list_tools()}
     assert "order_total" in by_name["get_checkout"]
     assert "order_total" in by_name["place_order"]
-
