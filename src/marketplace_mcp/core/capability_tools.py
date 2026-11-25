@@ -24,4 +24,3 @@ def marketplace_capabilities(
     current MCP tool names, while `name` remains stable as adapters evolve.
     """
     return capabilities_for(marketplace)
-
