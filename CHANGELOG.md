@@ -6,6 +6,10 @@ Notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `marketplace_capabilities()` exposes the stable cross-marketplace capability
+  contract and exact adapter-specific tool names.
+
 ## [2.0.0] - 2026-10-20
 
 ### Changed
@@ -282,3 +286,4 @@ First stable release. 39 tools over one ozon.ru buyer account.
   rather than returned as empty results.
 - Errors carry a machine-readable code beside a sentence written to be relayed.
 - Prometheus metrics at `/metrics`; `stdio` and `sse` transports.
+
