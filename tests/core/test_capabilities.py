@@ -46,4 +46,3 @@ def test_capability_unavailable_is_a_branchable_error() -> None:
 
     assert error.code is ErrorCode.CAPABILITY_UNAVAILABLE
     assert str(error).startswith("[capability_unavailable]")
-
